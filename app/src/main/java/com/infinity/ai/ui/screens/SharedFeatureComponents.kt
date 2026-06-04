@@ -2,6 +2,8 @@ package com.infinity.ai.ui.screens
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.ScrollState
@@ -220,6 +222,33 @@ fun CenteredSpinner(label: String, color: Color, isDarkTheme: Boolean) {
         Spacer(Modifier.height(16.dp))
         Text(label, style = MaterialTheme.typography.bodyMedium,
             color = color.copy(alpha = alpha))
+    }
+}
+
+// ── Saved-to-Library banner ─────────────────────────────────────────────────
+
+@Composable
+fun SavedBanner(visible: Boolean) {
+    AnimatedVisibility(
+        visible = visible,
+        enter   = fadeIn() + slideInVertically { -it },
+        exit    = fadeOut() + slideOutVertically { -it }
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(SuccessGreen.copy(alpha = 0.92f))
+                .padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(Icons.Default.CheckCircle, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text("Saved to Library", style = MaterialTheme.typography.labelLarge, color = Color.White)
+            }
+        }
     }
 }
 

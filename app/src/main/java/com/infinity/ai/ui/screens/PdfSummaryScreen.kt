@@ -43,6 +43,7 @@ fun PdfSummaryScreen(
     val uiState         by viewModel.uiState.collectAsState()
     val summaryText     by viewModel.summaryText.collectAsState()
     val extractProgress by viewModel.extractionProgress.collectAsState()
+    val showSavedBanner by viewModel.showSavedBanner.collectAsState()
 
     // PDF file picker — filters for PDF MIME type
     val filePicker = rememberLauncherForActivityResult(
@@ -58,6 +59,7 @@ fun PdfSummaryScreen(
                 .statusBarsPadding()
                 .padding(bottom = bottomPadding)
         ) {
+            SavedBanner(showSavedBanner)
             // ── Header ────────────────────────────────────────────────────────
             PdfHeader(
                 isDarkTheme  = isDarkTheme,

@@ -46,6 +46,7 @@ fun OcrScreen(
     val uiState       by vm.uiState.collectAsState()
     val extractedText by vm.extractedText.collectAsState()
     val resultText    by vm.resultText.collectAsState()
+    val showSavedBanner by vm.showSavedBanner.collectAsState()
     val context       = LocalContext.current
 
     // ── Camera URI ────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ fun OcrScreen(
                 .statusBarsPadding()
                 .padding(bottom = bottomPadding)
         ) {
+            SavedBanner(showSavedBanner)
             FeatureHeader(
                 title       = "OCR Scanner",
                 isDarkTheme = isDarkTheme,

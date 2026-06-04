@@ -29,15 +29,17 @@ import androidx.navigation.compose.*
 import com.infinity.ai.ui.components.toOrbState
 import com.infinity.ai.ui.screens.*
 import com.infinity.ai.viewmodel.ChatViewModel
+import com.infinity.ai.viewmodel.LibraryViewModel
 
 sealed class Screen(val route: String, val label: String, val icon: ImageVector) {
     object Dashboard : Screen("dashboard", "Home",     Icons.Default.Home)
     object Chat      : Screen("chat",      "Chat",     Icons.Default.Chat)
     object Tools     : Screen("tools",     "Tools",    Icons.Default.Apps)
+    object Library   : Screen("library",   "Library",  Icons.Default.AutoStories)
     object Settings  : Screen("settings",  "Settings", Icons.Default.Settings)
 }
 
-private val navItems = listOf(Screen.Dashboard, Screen.Chat, Screen.Tools, Screen.Settings)
+private val navItems = listOf(Screen.Dashboard, Screen.Chat, Screen.Tools, Screen.Library, Screen.Settings)
 
 @Composable
 fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
@@ -48,6 +50,7 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
 
     val context = LocalContext.current
     val chatViewModel: ChatViewModel = viewModel()
+    val libraryViewModel: LibraryViewModel = viewModel()
     val aiState by chatViewModel.aiState.collectAsState()
     val orbState = aiState.toOrbState()
 
@@ -208,6 +211,14 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
                     isDarkTheme   = isDarkTheme,
                     bottomPadding = innerPadding.calculateBottomPadding(),
                     onToggleTheme = onToggleTheme
+                )
+            }
+            composable(Screen.Library.route) {
+                LibraryScreen(
+                    isDarkTheme   = isDarkTheme,
+                    bottomPadding = innerPadding.calculateBottomPadding(),
+                    onOpenEntry   = { /* detail view future */ },
+                    vm            = libraryViewModel
                 )
             }
             composable("voice") {

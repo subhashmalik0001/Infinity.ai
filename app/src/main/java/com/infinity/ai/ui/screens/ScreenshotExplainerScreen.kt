@@ -38,6 +38,7 @@ fun ScreenshotExplainerScreen(
     val uiState       by vm.uiState.collectAsState()
     val extractedText by vm.extractedText.collectAsState()
     val resultText    by vm.resultText.collectAsState()
+    val showSavedBanner by vm.showSavedBanner.collectAsState()
 
     val galleryLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -50,6 +51,7 @@ fun ScreenshotExplainerScreen(
                 .statusBarsPadding()
                 .padding(bottom = bottomPadding)
         ) {
+            SavedBanner(showSavedBanner)
             FeatureHeader(
                 title       = "Screenshot Explainer",
                 isDarkTheme = isDarkTheme,

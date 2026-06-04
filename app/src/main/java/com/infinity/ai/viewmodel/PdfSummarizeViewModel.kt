@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinity.ai.ai.repository.AIRepository
 import com.infinity.ai.ai.state.AIInferenceState
+import com.infinity.ai.data.library.EntryType
+import com.infinity.ai.data.library.LibraryRepository
 import com.infinity.ai.model.ChatMessage
 import com.infinity.ai.pdf.PdfTextExtractor
 import kotlinx.coroutines.Dispatchers
@@ -40,8 +42,12 @@ class PdfSummarizeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ── Own repository instance — isolated from ChatViewModel ─────────────────
-    private val repository = AIRepository(app)
-    private val extractor  = PdfTextExtractor(app)
+    private val repository  = AIRepository(app)
+    private val extractor    = PdfTextExtractor(app)
+    private val libraryRepo  = LibraryRepository.getInstance(app)
+
+    private val _showSavedBanner = MutableStateFlow(false)
+    val showSavedBanner: StateFlow<Boolean> = _showSavedBanner.asStateFlow()
 
     // ── Public state ──────────────────────────────────────────────────────────
     val aiState: StateFlow<AIInferenceState> = repository.aiState
@@ -132,8 +138,10 @@ class PdfSummarizeViewModel(app: Application) : AndroidViewModel(app) {
                                     _uiState.value = PdfSummarizeUiState.Error("Generation cancelled unexpectedly.")
                                 _summaryText.value.isBlank() ->
                                     _uiState.value = PdfSummarizeUiState.Error("No summary was generated. Please try again.")
-                                else ->
+                                else -> {
                                     _uiState.value = PdfSummarizeUiState.Done
+                                    autoSave()
+                                }
                             }
                         }
                         .collect { token ->
@@ -182,6 +190,17 @@ class PdfSummarizeViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ── Prompt construction ───────────────────────────────────────────────────
+
+    private suspend fun autoSave() {
+        val text = _summaryText.value
+        if (text.isBlank()) return
+        libraryRepo.save(EntryType.PDF_SUMMARY, text)
+        _showSavedBanner.value = true
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2_500)
+            _showSavedBanner.value = false
+        }
+    }
 
     private fun buildSummaryPrompt(pdfText: String): String =
         "Summarize the following document in 5 concise bullet points.\n\n$pdfText"

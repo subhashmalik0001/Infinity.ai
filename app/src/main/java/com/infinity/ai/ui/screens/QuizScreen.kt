@@ -41,6 +41,7 @@ fun QuizScreen(
     val uiState    by vm.uiState.collectAsState()
     val quizText   by vm.quizText.collectAsState()
     val sourceText by vm.sourceText.collectAsState()
+    val showSavedBanner by vm.showSavedBanner.collectAsState()
 
     val imageLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
@@ -53,6 +54,7 @@ fun QuizScreen(
                 .statusBarsPadding()
                 .padding(bottom = bottomPadding)
         ) {
+            SavedBanner(showSavedBanner)
             FeatureHeader(
                 title       = "Quiz Generator",
                 isDarkTheme = isDarkTheme,

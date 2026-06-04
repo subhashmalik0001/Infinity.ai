@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.infinity.ai.ai.repository.AIRepository
 import com.infinity.ai.ai.state.AIInferenceState
+import com.infinity.ai.data.library.EntryType
+import com.infinity.ai.data.library.LibraryRepository
 import com.infinity.ai.ocr.AiTextProcessor
 import com.infinity.ai.ocr.OcrTextExtractor
 import kotlinx.coroutines.Dispatchers
@@ -29,6 +31,10 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repository = AIRepository(app)
     private val extractor  = OcrTextExtractor()
+    private val libraryRepo = LibraryRepository.getInstance(app)
+
+    private val _showSavedBanner = MutableStateFlow(false)
+    val showSavedBanner: StateFlow<Boolean> = _showSavedBanner.asStateFlow()
 
     val aiState: StateFlow<AIInferenceState> = repository.aiState
 
@@ -85,7 +91,10 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
                 prompt      = prompt,
                 outputFlow  = _resultText as MutableStateFlow<String>,
                 userStopped = { userStopped },
-                onDone      = { _uiState.value = OcrUiState.Done(action) },
+                onDone      = {
+                    _uiState.value = OcrUiState.Done(action)
+                    viewModelScope.launch(Dispatchers.IO) { autoSave(action) }
+                },
                 onError     = { msg -> _uiState.value = OcrUiState.Error(msg) }
             )
         }
@@ -97,6 +106,17 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
         job?.cancel()
         val cur = _uiState.value
         if (cur is OcrUiState.Processing) _uiState.value = OcrUiState.Done(cur.action)
+    }
+
+    private suspend fun autoSave(action: OcrAction) {
+        val text = _resultText.value
+        if (text.isBlank()) return
+        libraryRepo.save(EntryType.OCR, text, title = "OCR – ${action.label}")
+        _showSavedBanner.value = true
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(2_500)
+            _showSavedBanner.value = false
+        }
     }
 
     fun reset() {
