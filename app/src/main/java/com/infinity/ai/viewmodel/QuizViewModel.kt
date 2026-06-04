@@ -32,7 +32,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
             "then state the correct answer. Be concise.\n\nText:"
     }
 
-    private val repository  = AIRepository(app)
+    private val repository  = AIRepository.getInstance(app)
     private val extractor    = OcrTextExtractor()
     private val libraryRepo  = LibraryRepository.getInstance(app)
 
@@ -73,7 +73,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = QuizUiState.Extracting
             extractor.extract(getApplication(), uri).fold(
-                onSuccess = { text -> startGeneration(text) },
+                onSuccess = { (text, _) -> startGeneration(text) },
                 onFailure = { e ->
                     Log.e(TAG, "OCR failed", e)
                     _uiState.value = QuizUiState.Error(e.message ?: "Failed to read image")
@@ -99,6 +99,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
                 prompt      = prompt,
                 outputFlow  = _quizText as MutableStateFlow<String>,
                 userStopped = { userStopped },
+                scope       = viewModelScope,
                 onDone      = {
                     _uiState.value = QuizUiState.Done
                     viewModelScope.launch(Dispatchers.IO) { autoSave() }
@@ -144,7 +145,7 @@ class QuizViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
         extractor.close()
         repository.stop()
-        repository.unload()
+        // Do not call repository.unload() — shared instance
     }
 }
 

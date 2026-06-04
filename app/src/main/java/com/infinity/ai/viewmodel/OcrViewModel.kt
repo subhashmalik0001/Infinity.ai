@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 enum class OcrAction(val label: String, val prompt: String) {
-    SUMMARIZE  ("Summarize",       "Summarize the following text in 3 concise bullet points."),
+    SUMMARIZE  ("Summarize",       "Summarize the following text in 5 concise bullet points:"),
     KEY_POINTS ("Key Points",      "List the 5 most important key points from the following text."),
     EXPLAIN    ("Explain",         "Explain the following text in simple, clear language."),
     TO_NOTES   ("Convert to Notes","Convert the following text into organized study notes with headings.")
@@ -29,12 +29,21 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object { private const val TAG = "OcrViewModel" }
 
-    private val repository = AIRepository(app)
+    private val repository = AIRepository.getInstance(app)
     private val extractor  = OcrTextExtractor()
     private val libraryRepo = LibraryRepository.getInstance(app)
 
     private val _showSavedBanner = MutableStateFlow(false)
     val showSavedBanner: StateFlow<Boolean> = _showSavedBanner.asStateFlow()
+
+    private val _truncationNotice = MutableStateFlow(false)
+    val truncationNotice: StateFlow<Boolean> = _truncationNotice.asStateFlow()
+
+    private val _statusLabel = MutableStateFlow("Processing...")
+    val statusLabel: StateFlow<String> = _statusLabel.asStateFlow()
+
+    private val _tokenCount = MutableStateFlow(0)
+    val tokenCount: StateFlow<Int> = _tokenCount.asStateFlow()
 
     val aiState: StateFlow<AIInferenceState> = repository.aiState
 
@@ -61,11 +70,11 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
 
         job = viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = OcrUiState.Extracting
-            val result = extractor.extract(getApplication(), uri)
-            result.fold(
-                onSuccess = { text ->
-                    _extractedText.value = text
-                    _uiState.value = OcrUiState.TextReady(text)
+            extractor.extract(getApplication(), uri).fold(
+                onSuccess = { (text, wasTruncated) ->
+                    _extractedText.value    = text
+                    _truncationNotice.value = wasTruncated
+                    _uiState.value          = OcrUiState.TextReady(text)
                 },
                 onFailure = { e ->
                     Log.e(TAG, "OCR failed", e)
@@ -85,15 +94,22 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
 
         job = viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = OcrUiState.Processing(action)
+            _statusLabel.value = "Analyzing text..."
+            _tokenCount.value  = 0
             val prompt = AiTextProcessor.buildPrompt(action.prompt, text)
             AiTextProcessor.stream(
                 repository  = repository,
                 prompt      = prompt,
                 outputFlow  = _resultText as MutableStateFlow<String>,
                 userStopped = { userStopped },
+                scope       = viewModelScope,
                 onDone      = {
                     _uiState.value = OcrUiState.Done(action)
-                    viewModelScope.launch(Dispatchers.IO) { autoSave(action) }
+                    viewModelScope.launch(Dispatchers.IO) { autoSave(action, partial = false) }
+                },
+                onPartial   = {
+                    _uiState.value = OcrUiState.Partial(action)
+                    viewModelScope.launch(Dispatchers.IO) { autoSave(action, partial = true) }
                 },
                 onError     = { msg -> _uiState.value = OcrUiState.Error(msg) }
             )
@@ -108,14 +124,16 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
         if (cur is OcrUiState.Processing) _uiState.value = OcrUiState.Done(cur.action)
     }
 
-    private suspend fun autoSave(action: OcrAction) {
+    private suspend fun autoSave(action: OcrAction, partial: Boolean = false) {
         val text = _resultText.value
         if (text.isBlank()) return
         libraryRepo.save(EntryType.OCR, text, title = "OCR – ${action.label}")
-        _showSavedBanner.value = true
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(2_500)
-            _showSavedBanner.value = false
+        if (!partial) {
+            _showSavedBanner.value = true
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(2_500)
+                _showSavedBanner.value = false
+            }
         }
     }
 
@@ -130,15 +148,16 @@ class OcrViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
         extractor.close()
         repository.stop()
-        repository.unload()
+        // Do not call repository.unload() — shared instance, ChatViewModel owns lifecycle
     }
 }
 
 sealed class OcrUiState {
-    object Idle                            : OcrUiState()
-    object Extracting                      : OcrUiState()
-    data class TextReady(val text: String) : OcrUiState()
-    data class Processing(val action: OcrAction) : OcrUiState()
-    data class Done(val action: OcrAction) : OcrUiState()
-    data class Error(val message: String)  : OcrUiState()
+    object Idle                                      : OcrUiState()
+    object Extracting                                : OcrUiState()
+    data class TextReady(val text: String)           : OcrUiState()
+    data class Processing(val action: OcrAction)     : OcrUiState()
+    data class Done(val action: OcrAction)           : OcrUiState()
+    data class Partial(val action: OcrAction)        : OcrUiState()  // tokens received, stream ended early
+    data class Error(val message: String)            : OcrUiState()
 }

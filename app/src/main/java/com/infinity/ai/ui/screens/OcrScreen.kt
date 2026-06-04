@@ -43,11 +43,12 @@ fun OcrScreen(
     onNavigateBack: () -> Unit,
     vm: OcrViewModel = viewModel()
 ) {
-    val uiState       by vm.uiState.collectAsState()
-    val extractedText by vm.extractedText.collectAsState()
-    val resultText    by vm.resultText.collectAsState()
-    val showSavedBanner by vm.showSavedBanner.collectAsState()
-    val context       = LocalContext.current
+    val uiState           by vm.uiState.collectAsState()
+    val extractedText     by vm.extractedText.collectAsState()
+    val resultText        by vm.resultText.collectAsState()
+    val showSavedBanner   by vm.showSavedBanner.collectAsState()
+    val truncationNotice  by vm.truncationNotice.collectAsState()
+    val context           = LocalContext.current
 
     // ── Camera URI ────────────────────────────────────────────────────────────
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
@@ -91,6 +92,20 @@ fun OcrScreen(
                 .padding(bottom = bottomPadding)
         ) {
             SavedBanner(showSavedBanner)
+            if (truncationNotice) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(WarnAmber.copy(alpha = 0.15f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        "Large document detected. Summarizing first section for speed.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = WarnAmber
+                    )
+                }
+            }
             FeatureHeader(
                 title       = "OCR Scanner",
                 isDarkTheme = isDarkTheme,
@@ -100,11 +115,13 @@ fun OcrScreen(
                     is OcrUiState.TextReady  -> "Text extracted"
                     is OcrUiState.Processing -> "Processing..."
                     is OcrUiState.Done       -> "Done"
+                    is OcrUiState.Partial    -> "Partial"
                     is OcrUiState.Error      -> "Error"
                 },
                 dotColor    = when (uiState) {
                     is OcrUiState.Error      -> ErrorRed
                     is OcrUiState.Done       -> SuccessGreen
+                    is OcrUiState.Partial    -> WarnAmber
                     is OcrUiState.Processing -> Blue500
                     is OcrUiState.Extracting -> WarnAmber
                     else                     -> if (isDarkTheme) TextSecondary else TextSecondaryLight
@@ -121,12 +138,14 @@ fun OcrScreen(
                     onCamera    = onCamera
                 )
                 is OcrUiState.Extracting -> CenteredSpinner("Reading image...", WarnAmber, isDarkTheme)
-                is OcrUiState.TextReady, is OcrUiState.Processing, is OcrUiState.Done -> {
+                is OcrUiState.TextReady, is OcrUiState.Processing, is OcrUiState.Done, is OcrUiState.Partial -> {
                     val isProcessing = uiState is OcrUiState.Processing
+                    val isPartial    = uiState is OcrUiState.Partial
                     OcrReadyBody(
                         extractedText = extractedText,
                         resultText    = resultText,
                         isProcessing  = isProcessing,
+                        isPartial     = isPartial,
                         isDarkTheme   = isDarkTheme,
                         onAction      = { vm.runAction(it) },
                         onStop        = { vm.stop() },
@@ -186,6 +205,7 @@ private fun OcrReadyBody(
     extractedText: String,
     resultText   : String,
     isProcessing : Boolean,
+    isPartial    : Boolean,
     isDarkTheme  : Boolean,
     onAction     : (OcrAction) -> Unit,
     onStop       : () -> Unit,
@@ -235,12 +255,15 @@ private fun OcrReadyBody(
         if (resultText.isNotBlank() || isProcessing) {
             Spacer(Modifier.height(8.dp))
             StreamingResultCard(
-                text        = resultText,
-                isStreaming = isProcessing,
-                isDarkTheme = isDarkTheme,
-                scrollState = scroll,
-                onStop      = onStop,
-                modifier    = Modifier.weight(1f)
+                text           = resultText,
+                isStreaming    = isProcessing,
+                isDarkTheme    = isDarkTheme,
+                scrollState    = scroll,
+                onStop         = onStop,
+                modifier       = Modifier.weight(1f),
+                streamingLabel = "Generating...",
+                completeLabel  = if (isPartial) "Partial summary generated" else "Complete",
+                completeColor  = if (isPartial) WarnAmber else SuccessGreen
             )
         }
     }

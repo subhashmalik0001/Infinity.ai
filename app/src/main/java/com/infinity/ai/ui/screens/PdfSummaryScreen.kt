@@ -44,6 +44,8 @@ fun PdfSummaryScreen(
     val summaryText     by viewModel.summaryText.collectAsState()
     val extractProgress by viewModel.extractionProgress.collectAsState()
     val showSavedBanner by viewModel.showSavedBanner.collectAsState()
+    val statusLabel     by viewModel.statusLabel.collectAsState()
+    val tokenCount      by viewModel.tokenCount.collectAsState()
 
     // PDF file picker — filters for PDF MIME type
     val filePicker = rememberLauncherForActivityResult(
@@ -84,6 +86,8 @@ fun PdfSummaryScreen(
                     isDarkTheme   = isDarkTheme,
                     summaryText   = summaryText,
                     isStreaming   = true,
+                    statusLabel   = statusLabel,
+                    tokenCount    = tokenCount,
                     onStop        = { viewModel.stop() }
                 )
 
@@ -92,6 +96,14 @@ fun PdfSummaryScreen(
                     summaryText   = summaryText,
                     isStreaming   = false,
                     onStop        = {}
+                )
+
+                is PdfSummarizeUiState.Partial -> SummaryContent(
+                    isDarkTheme   = isDarkTheme,
+                    summaryText   = summaryText,
+                    isStreaming   = false,
+                    onStop        = {},
+                    partialNotice = true
                 )
 
                 is PdfSummarizeUiState.Error -> ErrorState(
@@ -161,10 +173,11 @@ private fun PdfHeader(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val dotColor = when (uiState) {
-                is PdfSummarizeUiState.Idle       -> if (isDarkTheme) TextSecondary else TextSecondaryLight
-                is PdfSummarizeUiState.Extracting -> WarnAmber
+                is PdfSummarizeUiState.Idle        -> if (isDarkTheme) TextSecondary else TextSecondaryLight
+                is PdfSummarizeUiState.Extracting  -> WarnAmber
                 is PdfSummarizeUiState.Summarizing -> Blue500
                 is PdfSummarizeUiState.Done        -> SuccessGreen
+                is PdfSummarizeUiState.Partial     -> WarnAmber
                 is PdfSummarizeUiState.Error       -> ErrorRed
             }
             Box(modifier = Modifier.size(6.dp).background(dotColor, CircleShape))
@@ -180,6 +193,7 @@ private fun PdfHeader(
                     is PdfSummarizeUiState.Extracting  -> "Reading..."
                     is PdfSummarizeUiState.Summarizing -> "Summarizing..."
                     is PdfSummarizeUiState.Done        -> "Done"
+                    is PdfSummarizeUiState.Partial     -> "Partial"
                     is PdfSummarizeUiState.Error       -> "Error"
                 },
                 style = MaterialTheme.typography.labelSmall,
@@ -382,10 +396,13 @@ private fun ExtractingState(isDarkTheme: Boolean, progress: Float) {
 
 @Composable
 private fun SummaryContent(
-    isDarkTheme: Boolean,
-    summaryText: String,
-    isStreaming: Boolean,
-    onStop: () -> Unit
+    isDarkTheme   : Boolean,
+    summaryText   : String,
+    isStreaming   : Boolean,
+    onStop        : () -> Unit,
+    statusLabel   : String  = "Generating summary...",
+    tokenCount    : Int     = 0,
+    partialNotice : Boolean = false
 ) {
     val scrollState = rememberScrollState()
 
@@ -416,10 +433,17 @@ private fun SummaryContent(
                 )
                 Box(modifier = Modifier.size(6.dp).background(Blue500.copy(dotAlpha), CircleShape))
                 Text(
-                    "Generating summary...",
+                    statusLabel,
                     style = MaterialTheme.typography.labelMedium,
                     color = Blue500
                 )
+                if (tokenCount > 0) {
+                    Text(
+                        "$tokenCount tokens",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Blue500.copy(alpha = 0.6f)
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 // Stop button
                 Box(
@@ -441,9 +465,9 @@ private fun SummaryContent(
             } else {
                 Box(modifier = Modifier.size(6.dp).background(SuccessGreen, CircleShape))
                 Text(
-                    "Summary complete",
+                    if (partialNotice) "Summary partially completed" else "Summary complete",
                     style = MaterialTheme.typography.labelMedium,
-                    color = SuccessGreen
+                    color = if (partialNotice) WarnAmber else SuccessGreen
                 )
             }
         }

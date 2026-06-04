@@ -22,7 +22,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         private const val TAG = "ChatViewModel"
     }
 
-    private val repository = AIRepository(app)
+    private val repository = AIRepository.getInstance(app)
 
     // ── Chat state ─────────────────────────────────────────────────────────────
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())

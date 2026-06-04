@@ -20,27 +20,27 @@ import kotlin.coroutines.resumeWithException
 class OcrTextExtractor {
 
     companion object {
-        private const val TAG      = "OcrTextExtractor"
-        const val MAX_CHARS        = 800   // same budget as PdfTextExtractor
+        private const val TAG = "OcrTextExtractor"
+        const val MAX_CHARS   = 800
     }
 
     private val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
     /**
      * Run OCR on the image at [uri].
-     * Returns Result.success(cleanedText) or Result.failure(exception).
+     * Returns Result.success(Pair(cleanedText, wasTruncated)) or Result.failure.
      */
-    suspend fun extract(context: Context, uri: Uri): Result<String> {
+    suspend fun extract(context: Context, uri: Uri): Result<Pair<String, Boolean>> {
         return try {
             val image = InputImage.fromFilePath(context, uri)
             val raw   = recognize(image)
-            if (raw.isBlank()) {
-                return Result.failure(Exception("No text detected in image."))
-            }
-            val clean   = raw.clean()
-            val trimmed = if (clean.length > MAX_CHARS) clean.take(MAX_CHARS) else clean
-            Log.i(TAG, "OCR: raw=${raw.length} clean=${clean.length} final=${trimmed.length} chars")
-            Result.success(trimmed)
+            if (raw.isBlank()) return Result.failure(Exception("No text detected in image."))
+            val clean       = raw.clean()
+            val truncated   = clean.length > MAX_CHARS
+            val final       = if (truncated) clean.take(MAX_CHARS) else clean
+            Log.i(TAG, "OCR: raw=${raw.length} clean=${clean.length} final=${final.length} truncated=$truncated")
+            Log.i(TAG, "  first 500 chars: ${final.take(500).replace("\n", "\\n")}")
+            Result.success(Pair(final, truncated))
         } catch (e: Exception) {
             Log.e(TAG, "OCR failed", e)
             Result.failure(e)

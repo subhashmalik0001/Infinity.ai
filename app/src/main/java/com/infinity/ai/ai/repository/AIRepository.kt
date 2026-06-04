@@ -33,7 +33,18 @@ class AIRepository(context: Context) {
 
     companion object {
         private const val TAG = "AIRepository"
-        private const val INIT_TIMEOUT_MS = 120_000L  // 2 minute timeout for model operations
+        private const val INIT_TIMEOUT_MS = 120_000L
+
+        @Volatile private var INSTANCE: AIRepository? = null
+
+        /**
+         * Single shared instance across all ViewModels.
+         * Prevents multiple loadModel() calls on the same JNI context.
+         */
+        fun getInstance(context: Context): AIRepository =
+            INSTANCE ?: synchronized(this) {
+                INSTANCE ?: AIRepository(context.applicationContext).also { INSTANCE = it }
+            }
     }
 
     private val storageManager = ModelStorageManager(context)

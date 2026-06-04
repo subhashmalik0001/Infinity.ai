@@ -29,8 +29,8 @@ class ScreenshotExplainerViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object { private const val TAG = "ScreenshotVM" }
 
-    private val repository  = AIRepository(app)
-    private val extractor    = OcrTextExtractor()   // reused from Feature 1
+    private val repository  = AIRepository.getInstance(app)
+    private val extractor    = OcrTextExtractor()
     private val libraryRepo  = LibraryRepository.getInstance(app)
 
     private val _showSavedBanner = MutableStateFlow(false)
@@ -62,7 +62,7 @@ class ScreenshotExplainerViewModel(app: Application) : AndroidViewModel(app) {
         job = viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = ScreenshotUiState.Extracting
             extractor.extract(getApplication(), uri).fold(
-                onSuccess = { text ->
+                onSuccess = { (text, _) ->
                     _extractedText.value = text
                     _uiState.value = ScreenshotUiState.TextReady(text)
                 },
@@ -89,6 +89,7 @@ class ScreenshotExplainerViewModel(app: Application) : AndroidViewModel(app) {
                 prompt      = prompt,
                 outputFlow  = _resultText as MutableStateFlow<String>,
                 userStopped = { userStopped },
+                scope       = viewModelScope,
                 onDone      = {
                     _uiState.value = ScreenshotUiState.Done(action)
                     viewModelScope.launch(Dispatchers.IO) { autoSave(action) }
@@ -128,7 +129,7 @@ class ScreenshotExplainerViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
         extractor.close()
         repository.stop()
-        repository.unload()
+        // Do not call repository.unload() — shared instance
     }
 }
 

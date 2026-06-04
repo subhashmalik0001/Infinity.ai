@@ -134,8 +134,10 @@ fun StreamingResultCard(
     scrollState   : ScrollState,
     onStop        : () -> Unit,
     modifier      : Modifier = Modifier,
-    accentColor   : Color = Blue500,
-    streamingLabel: String = "Generating..."
+    accentColor   : Color  = Blue500,
+    streamingLabel: String = "Generating...",
+    completeLabel : String = "Complete",
+    completeColor : Color  = SuccessGreen
 ) {
     Column(modifier = modifier) {
         // Status row
@@ -165,8 +167,8 @@ fun StreamingResultCard(
                     }
                 }
             } else {
-                Box(modifier = Modifier.size(6.dp).background(SuccessGreen, CircleShape))
-                Text("Complete", style = MaterialTheme.typography.labelMedium, color = SuccessGreen)
+                Box(modifier = Modifier.size(6.dp).background(completeColor, CircleShape))
+                Text(completeLabel, style = MaterialTheme.typography.labelMedium, color = completeColor)
             }
         }
 
