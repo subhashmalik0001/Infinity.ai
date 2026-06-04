@@ -166,7 +166,42 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
                 )
             }
             composable(Screen.Tools.route) {
-                ToolsScreen(isDarkTheme = isDarkTheme, bottomPadding = innerPadding.calculateBottomPadding())
+                ToolsScreen(
+                    isDarkTheme         = isDarkTheme,
+                    bottomPadding       = innerPadding.calculateBottomPadding(),
+                    onNavigateToPdf     = { navController.navigate("pdf_summary") },
+                    onNavigateToOcr     = { navController.navigate("ocr") },
+                    onNavigateToScreenshot = { navController.navigate("screenshot") },
+                    onNavigateToQuiz    = { navController.navigate("quiz") }
+                )
+            }
+            composable("pdf_summary") {
+                PdfSummaryScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("ocr") {
+                OcrScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("screenshot") {
+                ScreenshotExplainerScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("quiz") {
+                QuizScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
             composable(Screen.Settings.route) {
                 SettingsScreen(

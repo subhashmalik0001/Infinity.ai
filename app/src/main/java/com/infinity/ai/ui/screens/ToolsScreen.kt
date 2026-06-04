@@ -31,14 +31,23 @@ private data class Tool(
 )
 
 @Composable
-fun ToolsScreen(isDarkTheme: Boolean, bottomPadding: Dp) {
+fun ToolsScreen(
+    isDarkTheme            : Boolean,
+    bottomPadding          : Dp,
+    onNavigateToPdf        : () -> Unit = {},
+    onNavigateToOcr        : () -> Unit = {},
+    onNavigateToScreenshot : () -> Unit = {},
+    onNavigateToQuiz       : () -> Unit = {}
+) {
     val tools = listOf(
-        Tool("Voice Assistant", "Natural language voice commands", Icons.Default.Mic, Blue500),
-        Tool("File Analyzer", "Scan and extract insights from documents", Icons.Default.FolderOpen, Color(0xFF10B981)),
-        Tool("Smart Notes", "AI-powered note taking and summarization", Icons.Default.EditNote, Color(0xFFF59E0B)),
-        Tool("Smart Commands", "Execute intelligent AI commands", Icons.Default.Terminal, Color(0xFF8B5CF6)),
-        Tool("Local AI Model", "Offline LLM inference engine", Icons.Default.Memory, Color(0xFF06B6D4), false),
-        Tool("Image Vision", "Analyze and describe images", Icons.Default.Image, Color(0xFFEC4899), false),
+        Tool("Voice Assistant",  "Natural language voice commands",           Icons.Default.Mic,             Blue500),
+        Tool("File Analyzer",    "Scan and extract insights from documents",  Icons.Default.FolderOpen,      Color(0xFF10B981)),
+        Tool("OCR Scanner",      "Extract and analyze text from images",      Icons.Default.DocumentScanner, Blue500),
+        Tool("Screenshot",       "Explain errors, code and screenshots",      Icons.Default.ScreenSearchDesktop, Color(0xFF8B5CF6)),
+        Tool("Quiz Generator",   "Generate MCQs from any text or image",      Icons.Default.Quiz,            Color(0xFF10B981)),
+        Tool("Smart Notes",      "AI-powered note taking and summarization",  Icons.Default.EditNote,        Color(0xFFF59E0B)),
+        Tool("Local AI Model",   "Offline LLM inference engine",             Icons.Default.Memory,          Color(0xFF06B6D4), false),
+        Tool("Image Vision",     "Analyze and describe images",               Icons.Default.Image,           Color(0xFFEC4899), false),
     )
 
     val scroll = rememberScrollState()
@@ -73,7 +82,7 @@ fun ToolsScreen(isDarkTheme: Boolean, bottomPadding: Dp) {
             // Stats row
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatPill("4 Active", Blue500, isDarkTheme, Modifier.weight(1f))
+                StatPill("6 Active", Blue500, isDarkTheme, Modifier.weight(1f))
                 StatPill("2 Soon", if (isDarkTheme) TextSecondary else TextSecondaryLight, isDarkTheme, Modifier.weight(1f))
                 StatPill("∞ Scale", Color(0xFF8B5CF6), isDarkTheme, Modifier.weight(1f))
             }
@@ -86,8 +95,14 @@ fun ToolsScreen(isDarkTheme: Boolean, bottomPadding: Dp) {
                 SectionLabel("Available", isDarkTheme)
                 tools.filter { it.available }.forEach { tool ->
                     ToolCard(tool, isDarkTheme) {
-                        scope.launch {
-                            snackbarHostState.showSnackbar("${tool.name} — coming soon with full AI integration")
+                        when (tool.name) {
+                            "File Analyzer" -> onNavigateToPdf()
+                            "OCR Scanner"  -> onNavigateToOcr()
+                            "Screenshot"   -> onNavigateToScreenshot()
+                            "Quiz Generator" -> onNavigateToQuiz()
+                            else -> scope.launch {
+                                snackbarHostState.showSnackbar("${tool.name} — coming soon")
+                            }
                         }
                     }
                 }
