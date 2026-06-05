@@ -160,6 +160,11 @@ class CircleLearnViewModel(app: Application) : AndroidViewModel(app) {
         _savedToVault.value = false
     }
 
+    /** Called by service when screen capture fails before OCR starts. */
+    fun setError(message: String) {
+        _uiState.value = CircleUiState.Error(message)
+    }
+
     override fun onCleared() {
         super.onCleared()
         processor.close()

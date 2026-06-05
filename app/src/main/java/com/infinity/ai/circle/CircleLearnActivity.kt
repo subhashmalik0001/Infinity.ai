@@ -7,24 +7,18 @@ import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
-import androidx.compose.runtime.*
-import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.lifecycleScope
 import com.infinity.ai.ui.theme.InfinityTheme
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 
 /**
- * CircleLearnActivity
+ * CircleLearnActivity — FALLBACK ONLY.
  *
- * Transparent full-screen activity.
+ * Used when SYSTEM_ALERT_WINDOW permission is not granted and the overlay
+ * pipeline cannot run. In that case InfinityOverlayService captures the
+ * screenshot, stores it in [InfinityOverlayService.pendingScreenshot], and
+ * launches this transparent activity.
  *
- * Flow:
- *   1. Retrieve screenshot from InfinityOverlayService.pendingScreenshot
- *   2. Show RegionSelectionView (classic Android View — drawn on top of screenshot)
- *   3. On region confirmed → ViewModel.processRegion() → OCR
- *   4. On OCR done → swap to Compose bottom sheet (action sheet + result)
- *   5. On dismiss → finish()
+ * Normal flow: everything runs entirely inside InfinityOverlayService via
+ * WindowManager overlays and this activity is never launched.
  */
 class CircleLearnActivity : ComponentActivity() {
 
@@ -45,32 +39,26 @@ class CircleLearnActivity : ComponentActivity() {
         showSelectionView(screenshot)
     }
 
-    // ── Phase 4: Region selection ──────────────────────────────────────────────
-
     private fun showSelectionView(screenshot: Bitmap) {
         val selectionView = RegionSelectionView(this).apply {
             setScreenshot(screenshot)
             onCancel = { finish() }
             onRegionSelected = { region ->
-                Log.i(TAG, "Region selected: $region")
-                // Remove selection view, show Compose UI
                 setContentView(FrameLayout(this@CircleLearnActivity))
                 vm.processRegion(screenshot, region)
-                showComposeBottomSheet()
+                showBottomSheet()
             }
         }
         setContentView(selectionView)
     }
 
-    // ── Phase 7+: Compose bottom sheet ────────────────────────────────────────
-
-    private fun showComposeBottomSheet() {
+    private fun showBottomSheet() {
         setContent {
-            // Use the app's existing InfinityTheme — no new theme created
             InfinityTheme(darkTheme = true) {
                 CircleLearnBottomSheetHost(
-                    vm        = vm,
-                    onDismiss = { finish() }
+                    vm          = vm,
+                    onDismiss   = { finish() },
+                    onOpenInApp = null  // already inside the app
                 )
             }
         }
@@ -84,15 +72,10 @@ class CircleLearnActivity : ComponentActivity() {
         }
     }
 
-    override fun onPause() {
-        super.onPause()
-        // Don't finish on pause — user may background briefly
-    }
-
     override fun onDestroy() {
         super.onDestroy()
-        // Release screenshot bitmap — InfinityOverlayService will set a new one next capture
-        InfinityOverlayService.pendingScreenshot?.recycle()
+        // Clear the static bitmap; don't recycle — the bitmap may still be in use
+        // by the VM's OCR pipeline. GC will collect it.
         InfinityOverlayService.pendingScreenshot = null
     }
 }

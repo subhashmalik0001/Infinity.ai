@@ -42,8 +42,9 @@ private val DarkGlass  = Color(0x1AFFFFFF)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CircleLearnBottomSheetHost(
-    vm       : CircleLearnViewModel,
-    onDismiss: () -> Unit
+    vm          : CircleLearnViewModel,
+    onDismiss   : () -> Unit,
+    onOpenInApp : ((String?) -> Unit)? = null   // null when called from Activity (already in app)
 ) {
     val uiState     by vm.uiState.collectAsState()
     val ocrText     by vm.ocrText.collectAsState()
@@ -109,7 +110,8 @@ fun CircleLearnBottomSheetHost(
                         onStop      = {},
                         onSave      = { vm.saveToVault() },
                         onDismiss   = onDismiss,
-                        onRunAnother = { vm.reset().also { /* stay open, go back to actions */ } }
+                        onOpenInApp = onOpenInApp,
+                        onRunAnother = { vm.reset() }
                     )
 
                 is CircleUiState.Error ->
@@ -308,6 +310,7 @@ private fun ResultPanel(
     onStop       : () -> Unit,
     onSave       : () -> Unit,
     onDismiss    : () -> Unit,
+    onOpenInApp  : ((String?) -> Unit)? = null,
     onRunAnother : (() -> Unit)? = null
 ) {
     val scroll = rememberScrollState()
@@ -381,7 +384,7 @@ private fun ResultPanel(
         if (!isStreaming) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 OutlinedButton(
                     onClick = onSave,
@@ -391,7 +394,7 @@ private fun ResultPanel(
                 ) {
                     Icon(Icons.Default.BookmarkAdd, null, tint = Green500,
                         modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width(4.dp))
                     Text("Save", color = Green500)
                 }
                 if (onRunAnother != null) {
@@ -403,9 +406,23 @@ private fun ResultPanel(
                     ) {
                         Icon(Icons.Default.Refresh, null, tint = Color.White,
                             modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(6.dp))
+                        Spacer(Modifier.width(4.dp))
                         Text("New Action", color = Color.White)
                     }
+                }
+            }
+            // "Open Full Screen" — only shown when running as overlay (onOpenInApp != null)
+            if (onOpenInApp != null) {
+                TextButton(
+                    onClick = { onOpenInApp("library") },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                        .padding(bottom = 8.dp)
+                ) {
+                    Icon(Icons.Default.OpenInFull, null,
+                        tint = Color.White.copy(0.5f), modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("View in Library", color = Color.White.copy(0.5f),
+                        style = MaterialTheme.typography.labelMedium)
                 }
             }
         } else {

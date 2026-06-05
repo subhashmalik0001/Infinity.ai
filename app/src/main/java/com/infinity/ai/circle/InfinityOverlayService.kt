@@ -11,61 +11,94 @@ import android.media.ImageReader
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.*
-import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Gravity
+import android.view.WindowManager
 import androidx.core.app.NotificationCompat
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import com.infinity.ai.MainActivity
+import com.infinity.ai.ui.theme.InfinityTheme
 import kotlinx.coroutines.*
 
 /**
  * InfinityOverlayService
  *
- * Persistent foreground service that:
- * 1. Shows a notification (required for foreground services on API 26+)
- * 2. Attaches a floating bubble via FloatingBubbleView
- * 3. Manages MediaProjection lifecycle
- * 4. Captures the screen on demand and delivers the bitmap to CircleLearnActivity
+ * Owns the entire Circle Learn flow via WindowManager overlays.
+ * The host app is NEVER obscured by a full-screen Activity launch.
  *
- * Lifecycle:
- *   startService(ACTION_START) → show bubble
- *   startService(ACTION_STOP)  → tear everything down
- *   bubble tap                 → capture screen → start CircleLearnActivity
+ * Pipeline:
+ *   Bubble tap
+ *   → captureScreen()
+ *   → attachSelectionOverlay()      RegionSelectionView on WindowManager
+ *   → vm.processRegion()            OCR via existing pipeline
+ *   → attachBottomSheetOverlay()    CircleLearnBottomSheetHost on WindowManager
+ *   → onDismiss → removeAllOverlays(), restore bubble
+ *
+ * CircleLearnActivity is the fallback when SYSTEM_ALERT_WINDOW is not granted.
  */
 class InfinityOverlayService : Service() {
 
     companion object {
-        const val ACTION_START            = "com.infinity.ai.circle.START"
-        const val ACTION_STOP             = "com.infinity.ai.circle.STOP"
-        const val EXTRA_RESULT_CODE       = "result_code"
-        const val EXTRA_RESULT_DATA       = "result_data"
-        private const val NOTIF_ID        = 9001
-        private const val CHANNEL_ID     = "infinity_overlay"
-        private const val TAG             = "InfinityOverlayService"
+        const val ACTION_START       = "com.infinity.ai.circle.START"
+        const val ACTION_STOP        = "com.infinity.ai.circle.STOP"
+        const val EXTRA_RESULT_CODE  = "result_code"
+        const val EXTRA_RESULT_DATA  = "result_data"
+        private const val NOTIF_ID   = 9001
+        private const val CHANNEL_ID = "infinity_overlay"
+        private const val TAG        = "InfinityOverlayService"
 
-        // Shared screenshot accessible by CircleLearnActivity in the same process
+        /**
+         * Fallback: populated before launching CircleLearnActivity when overlay
+         * permission is unavailable. Not used in the normal overlay flow.
+         */
         @Volatile var pendingScreenshot: Bitmap? = null
     }
 
-    private var bubble       : FloatingBubbleView? = null
-    private var mediaProjection: MediaProjection?  = null
-    private var virtualDisplay : VirtualDisplay?   = null
-    private var imageReader  : ImageReader?        = null
-    private val scope        = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    // ── WindowManager ──────────────────────────────────────────────────────────
+    private lateinit var wm: WindowManager
+    private val overlayType
+        get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE
 
+    // ── Overlay views ──────────────────────────────────────────────────────────
+    private var bubble:           FloatingBubbleView? = null
+    private var selectionOverlay: RegionSelectionView? = null
+    private var sheetHost:        OverlayComposeHost? = null
+
+    // ── MediaProjection ────────────────────────────────────────────────────────
+    private var mediaProjection: MediaProjection? = null
+    private var virtualDisplay:  VirtualDisplay?  = null
+    private var imageReader:     ImageReader?     = null
+
+    // ── ViewModel (service-scoped) ─────────────────────────────────────────────
+    private val vmStore = ViewModelStore()
+    private lateinit var vm: CircleLearnViewModel
+
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private var screenWidth  = 0
     private var screenHeight = 0
     private var screenDpi    = 0
+    private var currentScreenshot: Bitmap? = null
 
     // ── Lifecycle ──────────────────────────────────────────────────────────────
 
     override fun onCreate() {
         super.onCreate()
+        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         createNotificationChannel()
 
         val dm = resources.displayMetrics
         screenWidth  = dm.widthPixels
         screenHeight = dm.heightPixels
         screenDpi    = dm.densityDpi
+
+        vm = ViewModelProvider(
+            vmStore,
+            ViewModelProvider.AndroidViewModelFactory.getInstance(application)
+        )[CircleLearnViewModel::class.java]
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -73,6 +106,7 @@ class InfinityOverlayService : Service() {
             ACTION_START -> {
                 startForeground(NOTIF_ID, buildNotification())
                 val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                @Suppress("DEPRECATION")
                 val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
                 if (resultCode == Activity.RESULT_OK && resultData != null) {
                     setupMediaProjection(resultCode, resultData)
@@ -87,7 +121,10 @@ class InfinityOverlayService : Service() {
     override fun onDestroy() {
         scope.cancel()
         hideBubble()
+        removeAllOverlays()
         teardownProjection()
+        currentScreenshot?.recycle(); currentScreenshot = null
+        vmStore.clear()
         super.onDestroy()
     }
 
@@ -97,33 +134,143 @@ class InfinityOverlayService : Service() {
 
     private fun showBubble() {
         if (!OverlayPermissionHelper.hasOverlayPermission(this)) {
-            Log.w(TAG, "No overlay permission — bubble not shown")
-            return
+            Log.w(TAG, "No overlay permission — bubble not shown"); return
         }
         bubble = FloatingBubbleView(this) { onBubbleTapped() }
         bubble?.show()
-        Log.i(TAG, "Bubble shown")
     }
 
-    private fun hideBubble() {
-        bubble?.hide()
-        bubble = null
-    }
+    private fun hideBubble() { bubble?.hide(); bubble = null }
+
+    // ── Step 1: Bubble tapped ─────────────────────────────────────────────────
 
     private fun onBubbleTapped() {
-        Log.i(TAG, "Bubble tapped — capturing screen")
+        if (!OverlayPermissionHelper.hasOverlayPermission(this)) {
+            fallbackToActivity(); return
+        }
+        // Hide bubble so it doesn't appear in the screenshot
+        bubble?.hide()
+
+        scope.launch {
+            delay(120) // let bubble hide animation finish before capturing
+            captureScreen { bitmap ->
+                currentScreenshot?.recycle()
+                currentScreenshot = bitmap
+                attachSelectionOverlay(bitmap)
+            }
+        }
+    }
+
+    // ── Step 2: Selection overlay ─────────────────────────────────────────────
+
+    private fun attachSelectionOverlay(screenshot: Bitmap) {
+        val params = fullScreenParams(
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+
+        val view = RegionSelectionView(this).apply {
+            setScreenshot(screenshot)
+            onCancel = {
+                scope.launch(Dispatchers.Main) {
+                    removeSelectionOverlay()
+                    bubble?.show()
+                }
+            }
+            onRegionSelected = { region ->
+                scope.launch(Dispatchers.Main) {
+                    removeSelectionOverlay()
+                    vm.processRegion(screenshot, region)
+                    attachBottomSheetOverlay()
+                }
+            }
+        }
+
+        selectionOverlay = view
+        runCatching { wm.addView(view, params) }
+            .onFailure { Log.e(TAG, "Failed to add selection overlay", it) }
+    }
+
+    private fun removeSelectionOverlay() {
+        selectionOverlay?.let { runCatching { wm.removeView(it) } }
+        selectionOverlay = null
+    }
+
+    // ── Step 3: Bottom-sheet overlay ──────────────────────────────────────────
+
+    private fun attachBottomSheetOverlay() {
+        val params = fullScreenParams(
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS
+        )
+
+        val host = OverlayComposeHost(this) {
+            InfinityTheme(darkTheme = true) {
+                CircleLearnBottomSheetHost(
+                    vm          = vm,
+                    onDismiss   = {
+                        scope.launch(Dispatchers.Main) {
+                            removeBottomSheetOverlay()
+                            vm.reset()
+                            currentScreenshot?.recycle(); currentScreenshot = null
+                            bubble?.show()
+                        }
+                    },
+                    onOpenInApp = { route ->
+                        scope.launch(Dispatchers.Main) {
+                            removeAllOverlays()
+                            vm.reset()
+                            launchMainActivity(route)
+                        }
+                    }
+                )
+            }
+        }
+
+        sheetHost = host
+        runCatching {
+            wm.addView(host.view, params)
+            host.start()
+        }.onFailure { Log.e(TAG, "Failed to add bottom sheet overlay", it) }
+    }
+
+    private fun removeBottomSheetOverlay() {
+        sheetHost?.let { it.stop(); runCatching { wm.removeView(it.view) } }
+        sheetHost = null
+    }
+
+    private fun removeAllOverlays() {
+        removeSelectionOverlay()
+        removeBottomSheetOverlay()
+    }
+
+    // ── Fallback: launch CircleLearnActivity when overlay permission missing ───
+
+    private fun fallbackToActivity() {
+        Log.w(TAG, "Overlay permission unavailable — falling back to CircleLearnActivity")
         captureScreen { bitmap ->
+            pendingScreenshot?.recycle()
             pendingScreenshot = bitmap
             val intent = Intent(this, CircleLearnActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or
-                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
-                         Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
             startActivity(intent)
         }
     }
 
-    // ── MediaProjection setup ──────────────────────────────────────────────────
+    // ── Open Infinity app (explicit user request only) ────────────────────────
+
+    private fun launchMainActivity(route: String?) {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            if (route != null) putExtra("route", route)
+        }
+        startActivity(intent)
+    }
+
+    // ── MediaProjection ────────────────────────────────────────────────────────
 
     private fun setupMediaProjection(resultCode: Int, data: Intent) {
         val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -135,28 +282,23 @@ class InfinityOverlayService : Service() {
         val mp = mediaProjection
         if (mp == null) {
             Log.e(TAG, "MediaProjection not available")
-            // Still launch the activity — it will show an error
-            onCaptured(Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
+            vm.setError("Screen capture not available. Please restart Circle Learn.")
+            attachBottomSheetOverlay()
             return
         }
 
-        // Clean up any previous reader
         virtualDisplay?.release()
         imageReader?.close()
 
-        imageReader = ImageReader.newInstance(screenWidth, screenHeight,
-            PixelFormat.RGBA_8888, 2)
-
+        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
         virtualDisplay = mp.createVirtualDisplay(
-            "CircleLearn",
-            screenWidth, screenHeight, screenDpi,
+            "CircleLearn", screenWidth, screenHeight, screenDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             imageReader!!.surface, null, null
         )
 
-        // Wait for the first image on IO thread
-        scope.launch {
-            delay(300) // give VirtualDisplay time to render one frame
+        scope.launch(Dispatchers.IO) {
+            delay(300) // allow VirtualDisplay to render one frame
             val image = imageReader?.acquireLatestImage()
             if (image == null) {
                 Log.e(TAG, "No image acquired")
@@ -166,28 +308,24 @@ class InfinityOverlayService : Service() {
                 return@launch
             }
             try {
-                val planes = image.planes
-                val buffer = planes[0].buffer
-                val pixelStride  = planes[0].pixelStride
-                val rowStride    = planes[0].rowStride
-                val rowPadding   = rowStride - pixelStride * screenWidth
+                val planes      = image.planes
+                val buffer      = planes[0].buffer
+                val pixelStride = planes[0].pixelStride
+                val rowStride   = planes[0].rowStride
+                val rowPadding  = rowStride - pixelStride * screenWidth
 
                 val bmp = Bitmap.createBitmap(
-                    screenWidth + rowPadding / pixelStride,
-                    screenHeight, Bitmap.Config.ARGB_8888
+                    screenWidth + rowPadding / pixelStride, screenHeight, Bitmap.Config.ARGB_8888
                 )
                 bmp.copyPixelsFromBuffer(buffer)
-
-                // Crop to exact screen size (remove row padding)
                 val cropped = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight)
                 if (cropped != bmp) bmp.recycle()
 
-                Log.i(TAG, "Screen captured: ${cropped.width}x${cropped.height}")
                 withContext(Dispatchers.Main) { onCaptured(cropped) }
             } finally {
                 image.close()
                 virtualDisplay?.release(); virtualDisplay = null
-                imageReader?.close();      imageReader = null
+                imageReader?.close();      imageReader    = null
             }
         }
     }
@@ -196,41 +334,51 @@ class InfinityOverlayService : Service() {
         virtualDisplay?.release(); virtualDisplay = null
         imageReader?.close();      imageReader    = null
         mediaProjection?.stop();   mediaProjection = null
-        pendingScreenshot?.recycle()
-        pendingScreenshot = null
+    }
+
+    // ── WindowManager helpers ─────────────────────────────────────────────────
+
+    private fun fullScreenParams(flags: Int) = WindowManager.LayoutParams(
+        WindowManager.LayoutParams.MATCH_PARENT,
+        WindowManager.LayoutParams.MATCH_PARENT,
+        0, 0,
+        overlayType,
+        flags,
+        PixelFormat.TRANSLUCENT
+    ).apply {
+        gravity = Gravity.TOP or Gravity.START
     }
 
     // ── Notification ───────────────────────────────────────────────────────────
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID, "Infinity Circle Learn",
-                NotificationManager.IMPORTANCE_LOW
+            val ch = NotificationChannel(
+                CHANNEL_ID, "Infinity Circle Learn", NotificationManager.IMPORTANCE_LOW
             ).apply { description = "Circle Learn overlay service" }
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-                .createNotificationChannel(channel)
+                .createNotificationChannel(ch)
         }
     }
 
     private fun buildNotification(): Notification {
-        val stopIntent = PendingIntent.getService(
+        val stopPi = PendingIntent.getService(
             this, 0,
             Intent(this, InfinityOverlayService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val openIntent = PendingIntent.getActivity(
+        val openPi = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Infinity Circle Learn")
-            .setContentText("Tap the bubble on any screen to learn instantly")
+            .setContentText("Tap the ∞ bubble to circle anything and learn instantly")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setOngoing(true)
-            .setContentIntent(openIntent)
-            .addAction(android.R.drawable.ic_delete, "Stop", stopIntent)
+            .setContentIntent(openPi)
+            .addAction(android.R.drawable.ic_delete, "Stop", stopPi)
             .build()
     }
 }
