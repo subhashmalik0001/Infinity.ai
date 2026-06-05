@@ -30,9 +30,9 @@ fun GradientBackground(
     Box(
         modifier = modifier.background(
             if (darkTheme)
-                Brush.verticalGradient(listOf(Color(0xFF141824), DarkBg, Color(0xFF0D1520)))
+                Brush.verticalGradient(listOf(Color(0xFF0B0F1A), DarkBg, Color(0xFF0D1320)))
             else
-                Brush.verticalGradient(listOf(Color(0xFFEDD5C8), Color(0xFFE8D0DC), Color(0xFFC8D8EE)))
+                Brush.verticalGradient(listOf(LightBg, LightBg, Color(0xFFEEF2F8)))
         ),
         content = content
     )
@@ -47,12 +47,12 @@ fun GlassCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (darkTheme) DarkGlass else LightGlass)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (darkTheme) DarkSurface else LightSurface)
             .border(
-                0.5.dp,
-                if (darkTheme) Color.White.copy(0.08f) else Color.White.copy(0.6f),
-                RoundedCornerShape(20.dp)
+                1.dp,
+                if (darkTheme) DarkBorder else LightBorder,
+                RoundedCornerShape(18.dp)
             )
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(16.dp),
@@ -125,10 +125,10 @@ fun AITaskCard(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(if (darkTheme) DarkGlass else LightGlass)
+            .background(if (darkTheme) DarkSurface else LightSurface)
             .border(
-                0.5.dp,
-                if (darkTheme) Color.White.copy(0.08f) else Color.White.copy(0.7f),
+                1.dp,
+                if (darkTheme) DarkBorder else LightBorder,
                 RoundedCornerShape(16.dp)
             )
             .clickable(onClick = onClick)
@@ -138,16 +138,16 @@ fun AITaskCard(
     ) {
         Box(
             modifier = Modifier
-                .size(44.dp)
-                .background(iconBg.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                .size(42.dp)
+                .background(Blue50, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = iconBg, modifier = Modifier.size(22.dp))
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(20.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 title,
-                style = MaterialTheme.typography.titleMedium,
+                style = MaterialTheme.typography.bodyMedium,
                 color = if (darkTheme) TextPrimary else TextPrimaryLight,
                 fontWeight = FontWeight.SemiBold
             )
@@ -161,7 +161,7 @@ fun AITaskCard(
         Icon(
             Icons.Default.ChevronRight, null,
             tint = if (darkTheme) TextSecondary else TextSecondaryLight,
-            modifier = Modifier.size(18.dp)
+            modifier = Modifier.size(16.dp)
         )
     }
 }

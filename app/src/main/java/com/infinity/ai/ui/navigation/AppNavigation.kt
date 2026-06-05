@@ -106,13 +106,14 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
         bottomBar = {
             if (showNav) {
                 NavigationBar(
-                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                    containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 0.dp,
                     windowInsets   = WindowInsets.navigationBars
                 ) {
                     navItems.forEach { screen ->
+                        val selected = currentRoute == screen.route
                         NavigationBarItem(
-                            selected = currentRoute == screen.route,
+                            selected = selected,
                             onClick  = {
                                 navController.navigate(screen.route) {
                                     popUpTo(navController.graph.findStartDestination().id) {
@@ -123,11 +124,11 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
                                 }
                             },
                             icon  = { Icon(screen.icon, screen.label, modifier = Modifier.size(22.dp)) },
-                            label = { Text(screen.label) },
+                            label = { Text(screen.label, style = MaterialTheme.typography.labelSmall) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor   = MaterialTheme.colorScheme.primary,
-                                selectedTextColor   = MaterialTheme.colorScheme.primary,
-                                indicatorColor      = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                selectedIconColor   = Color(0xFF4F8CFF),
+                                selectedTextColor   = Color(0xFF4F8CFF),
+                                indicatorColor      = Color(0xFF4F8CFF).copy(alpha = 0.10f),
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )

@@ -6,35 +6,37 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 
 private val Dark = darkColorScheme(
-    primary = Blue500,
-    onPrimary = TextPrimary,
-    background = DarkBg,
-    onBackground = TextPrimary,
-    surface = DarkSurface,
-    onSurface = TextPrimary,
-    surfaceVariant = DarkSurfaceElevated,
+    primary          = Blue500,
+    onPrimary        = TextPrimary,
+    background       = DarkBg,
+    onBackground     = TextPrimary,
+    surface          = DarkSurface,
+    onSurface        = TextPrimary,
+    surfaceVariant   = DarkSurfaceElevated,
     onSurfaceVariant = TextSecondary,
-    outline = DarkBorder,
-    secondary = Blue400,
-    onSecondary = DarkBg,
-    error = ErrorRed,
-    onError = TextPrimary
+    outline          = DarkBorder,
+    outlineVariant   = DarkBorder,
+    secondary        = Blue600,
+    onSecondary      = DarkBg,
+    error            = ErrorRed,
+    onError          = TextPrimary
 )
 
 private val Light = lightColorScheme(
-    primary = Blue500,
-    onPrimary = TextPrimary,
-    background = LightBg,
-    onBackground = TextPrimaryLight,
-    surface = LightSurface,
-    onSurface = TextPrimaryLight,
-    surfaceVariant = LightSurfaceElevated,
+    primary          = Blue500,
+    onPrimary        = TextPrimary,
+    background       = LightBg,
+    onBackground     = TextPrimaryLight,
+    surface          = LightSurface,
+    onSurface        = TextPrimaryLight,
+    surfaceVariant   = LightSurfaceElevated,
     onSurfaceVariant = TextSecondaryLight,
-    outline = LightBorder,
-    secondary = Blue500,
-    onSecondary = TextPrimary,
-    error = ErrorRed,
-    onError = TextPrimary
+    outline          = LightBorder,
+    outlineVariant   = LightBorder,
+    secondary        = Blue600,
+    onSecondary      = TextPrimary,
+    error            = ErrorRed,
+    onError          = TextPrimary
 )
 
 @Composable

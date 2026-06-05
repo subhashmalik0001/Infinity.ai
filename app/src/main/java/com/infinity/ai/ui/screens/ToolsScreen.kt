@@ -1,8 +1,10 @@
 package com.infinity.ai.ui.screens
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -11,6 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -18,18 +22,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinity.ai.ui.components.GradientBackground
-import com.infinity.ai.ui.components.GlassCard
 import com.infinity.ai.ui.theme.*
-import kotlinx.coroutines.launch
 
-private data class Tool(
-    val name: String,
-    val description: String,
-    val icon: ImageVector,
-    val color: Color,
-    val available: Boolean = true
-)
-
+// ── Exact same signature — all navigation callbacks preserved ─────────────────
 @Composable
 fun ToolsScreen(
     isDarkTheme            : Boolean,
@@ -40,168 +35,345 @@ fun ToolsScreen(
     onNavigateToQuiz       : () -> Unit = {},
     onNavigateToCircle     : () -> Unit = {}
 ) {
-    val tools = listOf(
-        Tool("Circle Learn",  "Circle anything on screen to learn instantly", Icons.Default.RadioButtonChecked, Blue500),
-        Tool("File Analyzer",    "Scan and extract insights from documents",  Icons.Default.FolderOpen,      Color(0xFF10B981)),
-        Tool("OCR Scanner",      "Extract and analyze text from images",      Icons.Default.DocumentScanner, Blue500),
-        Tool("Screenshot",       "Explain errors, code and screenshots",      Icons.Default.ScreenSearchDesktop, Color(0xFF8B5CF6)),
-        Tool("Quiz Generator",   "Generate MCQs from any text or image",      Icons.Default.Quiz,            Color(0xFF10B981)),
-        Tool("Smart Notes",      "AI-powered note taking and summarization",  Icons.Default.EditNote,        Color(0xFFF59E0B)),
-        Tool("Local AI Model",   "Offline LLM inference engine",             Icons.Default.Memory,          Color(0xFF06B6D4), false),
-        Tool("Image Vision",     "Analyze and describe images",               Icons.Default.Image,           Color(0xFFEC4899), false),
-    )
+    val dark = isDarkTheme
+    val bg   = if (dark) DarkBg       else LightBg
+    val surf = if (dark) DarkSurface  else LightSurface
+    val bord = if (dark) DarkBorder   else LightBorder
 
-    val scroll = rememberScrollState()
-    val scope = rememberCoroutineScope()
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    Scaffold(
-        containerColor = Color.Transparent,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        snackbarHost = { SnackbarHost(snackbarHostState) }
-    ) { innerPadding ->
-        GradientBackground(darkTheme = isDarkTheme, modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier
+    GradientBackground(darkTheme = dark, modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .padding(bottom = innerPadding.calculateBottomPadding())
-                .verticalScroll(scroll)) {
-            Spacer(Modifier.height(16.dp))
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
+        ) {
+            Spacer(Modifier.height(28.dp))
 
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                Text("Tools", style = MaterialTheme.typography.headlineMedium,
-                    color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                    fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(4.dp))
-                Text("AI-powered capabilities",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isDarkTheme) TextSecondary else TextSecondaryLight)
-            }
+            // ── Header ────────────────────────────────────────────────────────
+            Text(
+                "Tools",
+                style      = MaterialTheme.typography.headlineMedium,
+                color      = if (dark) TextPrimary else TextPrimaryLight,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "AI-powered capabilities",
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (dark) TextSecondary else TextSecondaryLight
+            )
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // Stats row
-            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatPill("7 Active", Blue500, isDarkTheme, Modifier.weight(1f))
-                StatPill("2 Soon", if (isDarkTheme) TextSecondary else TextSecondaryLight, isDarkTheme, Modifier.weight(1f))
-                StatPill("∞ Scale", Color(0xFF8B5CF6), isDarkTheme, Modifier.weight(1f))
-            }
+            // ════════════════════════════════════════════════════════════════
+            // ROW 1 — Circle Learn: full-width hero card
+            // ════════════════════════════════════════════════════════════════
+            BentoHeroCard(
+                icon        = Icons.Default.RadioButtonChecked,
+                title       = "Circle Learn",
+                description = "Circle anything on your screen to instantly explain, summarize, translate, or quiz yourself — powered by on-device AI.",
+                badge       = "Flagship",
+                isDarkTheme = dark,
+                onClick     = onNavigateToCircle,
+                modifier    = Modifier.fillMaxWidth().height(172.dp)
+            )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(12.dp))
 
-            // Available tools
-            Column(modifier = Modifier.padding(horizontal = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionLabel("Available", isDarkTheme)
-                tools.filter { it.available }.forEach { tool ->
-                    ToolCard(tool, isDarkTheme) {
-                        when (tool.name) {
-                            "Circle Learn"   -> onNavigateToCircle()
-                            "File Analyzer" -> onNavigateToPdf()
-                            "OCR Scanner"  -> onNavigateToOcr()
-                            "Screenshot"   -> onNavigateToScreenshot()
-                            "Quiz Generator" -> onNavigateToQuiz()
-                            else -> scope.launch {
-                                snackbarHostState.showSnackbar("${tool.name} — coming soon")
-                            }
-                        }
-                    }
+            // ════════════════════════════════════════════════════════════════
+            // ROW 2 — File Analyzer (tall) | OCR + Screenshot (stacked)
+            // ════════════════════════════════════════════════════════════════
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Left — tall card
+                BentoLargeCard(
+                    icon        = Icons.Default.FolderOpen,
+                    title       = "File Analyzer",
+                    description = "Summarize PDFs and documents with AI",
+                    isDarkTheme = dark,
+                    onClick     = onNavigateToPdf,
+                    modifier    = Modifier.weight(1f).height(280.dp)
+                )
+
+                // Right — two stacked medium cards
+                Column(
+                    modifier            = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    BentoMediumCard(
+                        icon        = Icons.Default.DocumentScanner,
+                        title       = "OCR Scanner",
+                        description = "Extract text from images",
+                        isDarkTheme = dark,
+                        onClick     = onNavigateToOcr,
+                        modifier    = Modifier.fillMaxWidth().height(134.dp)
+                    )
+                    BentoMediumCard(
+                        icon        = Icons.Default.ScreenSearchDesktop,
+                        title       = "Screenshot",
+                        description = "Explain errors & code",
+                        isDarkTheme = dark,
+                        onClick     = onNavigateToScreenshot,
+                        modifier    = Modifier.fillMaxWidth().height(134.dp)
+                    )
                 }
-                Spacer(Modifier.height(8.dp))
-                SectionLabel("Coming Soon", isDarkTheme)
-                tools.filter { !it.available }.forEach { tool ->
-                    ToolCard(tool, isDarkTheme, onClick = null)
-                }
             }
 
-            Spacer(Modifier.height(bottomPadding + 16.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // ════════════════════════════════════════════════════════════════
+            // ROW 3 — Quiz Generator | Smart Notes (equal halves)
+            // ════════════════════════════════════════════════════════════════
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BentoMediumCard(
+                    icon        = Icons.Default.Quiz,
+                    title       = "Quiz Generator",
+                    description = "Generate MCQs from any content",
+                    isDarkTheme = dark,
+                    onClick     = onNavigateToQuiz,
+                    modifier    = Modifier.weight(1f).height(148.dp)
+                )
+                BentoMediumCard(
+                    icon        = Icons.Default.EditNote,
+                    title       = "Smart Notes",
+                    description = "AI-powered note taking",
+                    isDarkTheme = dark,
+                    onClick     = {},        // no dedicated route yet — same as before
+                    modifier    = Modifier.weight(1f).height(148.dp)
+                )
             }
+
+            Spacer(Modifier.height(bottomPadding + 24.dp))
         }
     }
 }
 
-@Composable
-private fun SectionLabel(text: String, isDarkTheme: Boolean) {
-    Text(text.uppercase(), style = MaterialTheme.typography.labelSmall,
-        color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-        fontWeight = FontWeight.Medium, letterSpacing = 1.sp)
-}
+// ── Hero card — full-width, gradient accent strip ─────────────────────────────
 
 @Composable
-private fun StatPill(text: String, color: Color, isDarkTheme: Boolean, modifier: Modifier) {
+private fun BentoHeroCard(
+    icon:        ImageVector,
+    title:       String,
+    description: String,
+    badge:       String,
+    isDarkTheme: Boolean,
+    onClick:     () -> Unit,
+    modifier:    Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed           by interactionSource.collectIsPressedAsState()
+    val scale             by animateFloatAsState(
+        targetValue   = if (pressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "heroScale"
+    )
+
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(if (isDarkTheme) DarkGlass else LightGlass)
-            .border(0.5.dp,
-                if (isDarkTheme) Color.White.copy(0.08f) else Color.White.copy(0.7f),
-                RoundedCornerShape(12.dp))
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isDarkTheme) DarkSurface else LightSurface)
+            .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, RoundedCornerShape(20.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
     ) {
-        Text(text, style = MaterialTheme.typography.labelMedium, color = color, fontWeight = FontWeight.SemiBold)
+        // Subtle blue gradient strip on the left edge
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .fillMaxHeight()
+                .background(
+                    Brush.verticalGradient(listOf(Blue500, Blue600)),
+                    RoundedCornerShape(topStart = 20.dp, bottomStart = 20.dp)
+                )
+        )
+
+        Column(
+            modifier            = Modifier
+                .fillMaxSize()
+                .padding(start = 20.dp, end = 16.dp, top = 20.dp, bottom = 20.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier         = Modifier.size(44.dp).background(Blue50, RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(icon, null, tint = Blue500, modifier = Modifier.size(22.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        title,
+                        style      = MaterialTheme.typography.titleMedium,
+                        color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    BadgeChip(badge, isDarkTheme)
+                }
+                Icon(
+                    Icons.Default.ArrowForward, null,
+                    tint     = Blue500,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+
+            Text(
+                description,
+                style      = MaterialTheme.typography.bodySmall,
+                color      = if (isDarkTheme) TextSecondary else TextSecondaryLight,
+                lineHeight = 18.sp
+            )
+        }
     }
 }
 
-@Composable
-private fun ToolCard(tool: Tool, isDarkTheme: Boolean, onClick: (() -> Unit)? = null) {
-    val bg = if (isDarkTheme) DarkGlass else LightGlass
-    val border = if (isDarkTheme) Color.White.copy(0.08f) else Color.White.copy(0.7f)
+// ── Large card — tall, left column ────────────────────────────────────────────
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(bg)
-            .border(0.5.dp, border, RoundedCornerShape(16.dp))
-            .then(
-                if (onClick != null && tool.available)
-                    Modifier.clickable(onClick = onClick)
-                else
-                    Modifier
-            )
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
+@Composable
+private fun BentoLargeCard(
+    icon:        ImageVector,
+    title:       String,
+    description: String,
+    isDarkTheme: Boolean,
+    onClick:     () -> Unit,
+    modifier:    Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed           by interactionSource.collectIsPressedAsState()
+    val scale             by animateFloatAsState(
+        targetValue   = if (pressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "largeScale"
+    )
+
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (isDarkTheme) DarkSurface else LightSurface)
+            .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, RoundedCornerShape(20.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
+        // Icon at top
         Box(
-            modifier = Modifier.size(44.dp)
-                .background(
-                    tool.color.copy(if (tool.available) 0.15f else 0.07f),
-                    RoundedCornerShape(12.dp)
-                ),
+            modifier         = Modifier.size(48.dp).background(Blue50, RoundedCornerShape(14.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(tool.icon, null,
-                tint = tool.color.copy(if (tool.available) 1f else 0.4f),
-                modifier = Modifier.size(22.dp))
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(24.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(tool.name, style = MaterialTheme.typography.bodyLarge,
-                color = if (tool.available)
-                    if (isDarkTheme) TextPrimary else TextPrimaryLight
-                else
-                    if (isDarkTheme) TextDisabled else TextSecondaryLight.copy(alpha = 0.5f),
-                fontWeight = FontWeight.Medium)
+
+        // Text at bottom
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                title,
+                style      = MaterialTheme.typography.titleSmall,
+                color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                description,
+                style      = MaterialTheme.typography.bodySmall,
+                color      = if (isDarkTheme) TextSecondary else TextSecondaryLight,
+                lineHeight = 17.sp
+            )
             Spacer(Modifier.height(2.dp))
-            Text(tool.description, style = MaterialTheme.typography.bodySmall,
-                color = if (isDarkTheme) TextSecondary else TextSecondaryLight)
-        }
-        if (!tool.available) {
-            Box(
-                modifier = Modifier
-                    .background(if (isDarkTheme) DarkSurfaceElevated else LightSurfaceElevated,
-                        RoundedCornerShape(6.dp))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text("Soon", style = MaterialTheme.typography.labelSmall,
-                    color = if (isDarkTheme) TextDisabled else TextSecondaryLight)
+                Text(
+                    "Open",
+                    style      = MaterialTheme.typography.labelSmall,
+                    color      = Blue500,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(Icons.Default.ArrowForward, null,
+                    tint = Blue500, modifier = Modifier.size(12.dp))
             }
-        } else {
-            Icon(Icons.Default.ChevronRight, null,
-                tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                modifier = Modifier.size(18.dp))
         }
+    }
+}
+
+// ── Medium card — used in stacked right column and bottom row ─────────────────
+
+@Composable
+private fun BentoMediumCard(
+    icon:        ImageVector,
+    title:       String,
+    description: String,
+    isDarkTheme: Boolean,
+    onClick:     () -> Unit,
+    modifier:    Modifier = Modifier
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed           by interactionSource.collectIsPressedAsState()
+    val scale             by animateFloatAsState(
+        targetValue   = if (pressed) 0.96f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label         = "medScale"
+    )
+
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (isDarkTheme) DarkSurface else LightSurface)
+            .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, RoundedCornerShape(18.dp))
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Box(
+            modifier         = Modifier.size(38.dp).background(Blue50, RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(19.dp))
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                title,
+                style      = MaterialTheme.typography.labelLarge,
+                color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                fontWeight = FontWeight.Bold,
+                maxLines   = 1
+            )
+            Text(
+                description,
+                style    = MaterialTheme.typography.bodySmall,
+                color    = if (isDarkTheme) TextSecondary else TextSecondaryLight,
+                maxLines = 2,
+                lineHeight = 16.sp
+            )
+        }
+    }
+}
+
+// ── Badge chip ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun BadgeChip(label: String, isDarkTheme: Boolean) {
+    Box(
+        modifier = Modifier
+            .background(Blue50, RoundedCornerShape(6.dp))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            label,
+            style      = MaterialTheme.typography.labelSmall,
+            color      = Blue500,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
