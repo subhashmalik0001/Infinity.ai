@@ -37,10 +37,11 @@ fun ToolsScreen(
     onNavigateToPdf        : () -> Unit = {},
     onNavigateToOcr        : () -> Unit = {},
     onNavigateToScreenshot : () -> Unit = {},
-    onNavigateToQuiz       : () -> Unit = {}
+    onNavigateToQuiz       : () -> Unit = {},
+    onNavigateToCircle     : () -> Unit = {}
 ) {
     val tools = listOf(
-        Tool("Voice Assistant",  "Natural language voice commands",           Icons.Default.Mic,             Blue500),
+        Tool("Circle Learn",  "Circle anything on screen to learn instantly", Icons.Default.RadioButtonChecked, Blue500),
         Tool("File Analyzer",    "Scan and extract insights from documents",  Icons.Default.FolderOpen,      Color(0xFF10B981)),
         Tool("OCR Scanner",      "Extract and analyze text from images",      Icons.Default.DocumentScanner, Blue500),
         Tool("Screenshot",       "Explain errors, code and screenshots",      Icons.Default.ScreenSearchDesktop, Color(0xFF8B5CF6)),
@@ -82,7 +83,7 @@ fun ToolsScreen(
             // Stats row
             Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatPill("6 Active", Blue500, isDarkTheme, Modifier.weight(1f))
+                StatPill("7 Active", Blue500, isDarkTheme, Modifier.weight(1f))
                 StatPill("2 Soon", if (isDarkTheme) TextSecondary else TextSecondaryLight, isDarkTheme, Modifier.weight(1f))
                 StatPill("∞ Scale", Color(0xFF8B5CF6), isDarkTheme, Modifier.weight(1f))
             }
@@ -96,6 +97,7 @@ fun ToolsScreen(
                 tools.filter { it.available }.forEach { tool ->
                     ToolCard(tool, isDarkTheme) {
                         when (tool.name) {
+                            "Circle Learn"   -> onNavigateToCircle()
                             "File Analyzer" -> onNavigateToPdf()
                             "OCR Scanner"  -> onNavigateToOcr()
                             "Screenshot"   -> onNavigateToScreenshot()

@@ -170,12 +170,13 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
             }
             composable(Screen.Tools.route) {
                 ToolsScreen(
-                    isDarkTheme         = isDarkTheme,
-                    bottomPadding       = innerPadding.calculateBottomPadding(),
-                    onNavigateToPdf     = { navController.navigate("pdf_summary") },
-                    onNavigateToOcr     = { navController.navigate("ocr") },
+                    isDarkTheme            = isDarkTheme,
+                    bottomPadding          = innerPadding.calculateBottomPadding(),
+                    onNavigateToPdf        = { navController.navigate("pdf_summary") },
+                    onNavigateToOcr        = { navController.navigate("ocr") },
                     onNavigateToScreenshot = { navController.navigate("screenshot") },
-                    onNavigateToQuiz    = { navController.navigate("quiz") }
+                    onNavigateToQuiz       = { navController.navigate("quiz") },
+                    onNavigateToCircle     = { navController.navigate("circle_learn") }
                 )
             }
             composable("pdf_summary") {
@@ -201,6 +202,20 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
             }
             composable("quiz") {
                 QuizScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("circle_learn") {
+                CircleLearnEntryScreen(
+                    isDarkTheme    = isDarkTheme,
+                    bottomPadding  = innerPadding.calculateBottomPadding(),
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+            composable("circle_learn") {
+                CircleLearnEntryScreen(
                     isDarkTheme    = isDarkTheme,
                     bottomPadding  = innerPadding.calculateBottomPadding(),
                     onNavigateBack = { navController.popBackStack() }
