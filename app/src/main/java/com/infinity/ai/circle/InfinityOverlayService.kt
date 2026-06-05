@@ -68,10 +68,11 @@ class InfinityOverlayService : Service() {
     private var selectionOverlay: RegionSelectionView? = null
     private var sheetHost:        OverlayComposeHost? = null
 
-    // ── MediaProjection ────────────────────────────────────────────────────────
-    private var mediaProjection: MediaProjection? = null
-    private var virtualDisplay:  VirtualDisplay?  = null
-    private var imageReader:     ImageReader?     = null
+    // ── MediaProjection consent token (stored; no active projection at rest) ───
+    // Stored once at service start. A fresh MediaProjection is created per-tap,
+    // used for exactly one frame capture, then immediately stopped and nulled.
+    private var projectionResultCode: Int     = Activity.RESULT_CANCELED
+    private var projectionResultData: Intent? = null
 
     // ── ViewModel (service-scoped) ─────────────────────────────────────────────
     private val vmStore = ViewModelStore()
@@ -105,12 +106,9 @@ class InfinityOverlayService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 startForeground(NOTIF_ID, buildNotification())
-                val resultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
+                projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
                 @Suppress("DEPRECATION")
-                val resultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
-                if (resultCode == Activity.RESULT_OK && resultData != null) {
-                    setupMediaProjection(resultCode, resultData)
-                }
+                projectionResultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
                 showBubble()
             }
             ACTION_STOP -> stopSelf()
@@ -122,7 +120,6 @@ class InfinityOverlayService : Service() {
         scope.cancel()
         hideBubble()
         removeAllOverlays()
-        teardownProjection()
         currentScreenshot?.recycle(); currentScreenshot = null
         vmStore.clear()
         super.onDestroy()
@@ -271,43 +268,50 @@ class InfinityOverlayService : Service() {
     }
 
     // ── MediaProjection ────────────────────────────────────────────────────────
-
-    private fun setupMediaProjection(resultCode: Int, data: Intent) {
-        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        mediaProjection = mgr.getMediaProjection(resultCode, data)
-        Log.i(TAG, "MediaProjection ready")
-    }
+    // Created per-tap, used for one frame, then fully released.
+    // Nothing GPU-related is held between taps.
 
     private fun captureScreen(onCaptured: (Bitmap) -> Unit) {
-        val mp = mediaProjection
-        if (mp == null) {
-            Log.e(TAG, "MediaProjection not available")
+        val data = projectionResultData
+        if (projectionResultCode != Activity.RESULT_OK || data == null) {
+            Log.e(TAG, "No projection consent available")
             vm.setError("Screen capture not available. Please restart Circle Learn.")
             attachBottomSheetOverlay()
             return
         }
 
-        virtualDisplay?.release()
-        imageReader?.close()
-
-        imageReader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-        virtualDisplay = mp.createVirtualDisplay(
+        val mgr    = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        val mp     = mgr.getMediaProjection(projectionResultCode, data) ?: run {
+            Log.e(TAG, "getMediaProjection returned null")
+            vm.setError("Screen capture failed. Please restart Circle Learn.")
+            attachBottomSheetOverlay()
+            return
+        }
+        val reader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
+        val vd     = mp.createVirtualDisplay(
             "CircleLearn", screenWidth, screenHeight, screenDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader!!.surface, null, null
-        )
+            reader.surface, null, null
+        ) ?: run {
+            reader.close(); mp.stop()
+            Log.e(TAG, "createVirtualDisplay returned null")
+            vm.setError("Screen capture failed. Please restart Circle Learn.")
+            attachBottomSheetOverlay()
+            return
+        }
 
         scope.launch(Dispatchers.IO) {
             delay(300) // allow VirtualDisplay to render one frame
-            val image = imageReader?.acquireLatestImage()
-            if (image == null) {
-                Log.e(TAG, "No image acquired")
-                withContext(Dispatchers.Main) {
-                    onCaptured(Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888))
-                }
-                return@launch
-            }
+            val image = reader.acquireLatestImage()
+            // ── Release all projection resources immediately after frame grab ──
             try {
+                if (image == null) {
+                    Log.e(TAG, "No image acquired")
+                    withContext(Dispatchers.Main) {
+                        onCaptured(Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888))
+                    }
+                    return@launch
+                }
                 val planes      = image.planes
                 val buffer      = planes[0].buffer
                 val pixelStride = planes[0].pixelStride
@@ -318,22 +322,21 @@ class InfinityOverlayService : Service() {
                     screenWidth + rowPadding / pixelStride, screenHeight, Bitmap.Config.ARGB_8888
                 )
                 bmp.copyPixelsFromBuffer(buffer)
+                image.close()
+
                 val cropped = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight)
                 if (cropped != bmp) bmp.recycle()
 
+                Log.i(TAG, "Captured ${cropped.width}x${cropped.height} — releasing MediaProjection")
                 withContext(Dispatchers.Main) { onCaptured(cropped) }
             } finally {
-                image.close()
-                virtualDisplay?.release(); virtualDisplay = null
-                imageReader?.close();      imageReader    = null
+                // Always release in finally — even if bitmap copy throws
+                image?.close()
+                vd.release()
+                reader.close()
+                mp.stop()
             }
         }
-    }
-
-    private fun teardownProjection() {
-        virtualDisplay?.release(); virtualDisplay = null
-        imageReader?.close();      imageReader    = null
-        mediaProjection?.stop();   mediaProjection = null
     }
 
     // ── WindowManager helpers ─────────────────────────────────────────────────
