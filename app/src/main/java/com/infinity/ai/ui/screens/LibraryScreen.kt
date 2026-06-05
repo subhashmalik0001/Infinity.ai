@@ -1,6 +1,8 @@
 package com.infinity.ai.ui.screens
 
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,7 +28,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinity.ai.data.library.EntryType
 import com.infinity.ai.data.library.LibraryEntry
-import com.infinity.ai.ui.components.GlassCard
 import com.infinity.ai.ui.components.GradientBackground
 import com.infinity.ai.ui.theme.*
 import com.infinity.ai.viewmodel.LibraryViewModel
@@ -42,208 +44,312 @@ fun LibraryScreen(
     val entries      by vm.entries.collectAsState()
     val selectedType by vm.selectedType.collectAsState()
     val searchQuery  by vm.searchQuery.collectAsState()
+    val dark = isDarkTheme
 
-    GradientBackground(darkTheme = isDarkTheme, modifier = Modifier.fillMaxSize()) {
+    GradientBackground(darkTheme = dark, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
                 .padding(bottom = bottomPadding)
         ) {
+            Spacer(Modifier.height(24.dp))
+
             // ── Header ────────────────────────────────────────────────────────
-            Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Library", style = MaterialTheme.typography.headlineMedium,
-                        color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                        fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-                    Text("${entries.size}", style = MaterialTheme.typography.labelMedium,
-                        color = Blue500, fontWeight = FontWeight.SemiBold,
+            Row(
+                modifier = Modifier.padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Knowledge Vault",
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = if (dark) TextPrimary else TextPrimaryLight,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        "Your saved AI-generated content",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (dark) TextSecondary else TextSecondaryLight
+                    )
+                }
+                AnimatedVisibility(visible = entries.isNotEmpty()) {
+                    Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .background(Blue500.copy(0.12f))
-                            .padding(horizontal = 10.dp, vertical = 4.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-
-                // Search bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(if (isDarkTheme) DarkGlass else LightGlass)
-                        .border(0.5.dp,
-                            if (isDarkTheme) Color.White.copy(0.08f) else Color.White.copy(0.6f),
-                            RoundedCornerShape(14.dp))
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Default.Search, null,
-                        tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                        modifier = Modifier.size(16.dp))
-                    BasicTextField(
-                        value = searchQuery,
-                        onValueChange = { vm.setSearch(it) },
-                        modifier = Modifier.weight(1f),
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = if (isDarkTheme) TextPrimary else TextPrimaryLight
-                        ),
-                        cursorBrush = SolidColor(Blue500),
-                        singleLine = true,
-                        decorationBox = { inner ->
-                            if (searchQuery.isEmpty()) {
-                                Text("Search saved content…",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (isDarkTheme) TextSecondary else TextSecondaryLight)
-                            }
-                            inner()
-                        }
-                    )
-                    if (searchQuery.isNotEmpty()) {
-                        Icon(Icons.Default.Close, "Clear",
-                            tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                            modifier = Modifier.size(16.dp).clickable { vm.setSearch("") })
-                    }
-                }
-
-                Spacer(Modifier.height(10.dp))
-
-                // Category filter chips
-                Row(
-                    modifier = Modifier.horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        label = "All", selected = selectedType == null,
-                        isDarkTheme = isDarkTheme, color = Blue500
-                    ) { vm.setFilter(null) }
-                    EntryType.entries.forEach { type ->
-                        FilterChip(
-                            label = type.label, selected = selectedType == type,
-                            isDarkTheme = isDarkTheme, color = typeColor(type)
-                        ) { vm.setFilter(if (selectedType == type) null else type) }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-            }
-
-            // ── Content ───────────────────────────────────────────────────────
-            if (entries.isEmpty()) {
-                LibraryEmptyState(isDarkTheme, searchQuery.isNotBlank())
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(entries, key = { it.id }) { entry ->
-                        LibraryEntryCard(
-                            entry       = entry,
-                            isDarkTheme = isDarkTheme,
-                            onClick     = { onOpenEntry(entry.id) },
-                            onDelete    = { vm.delete(entry) }
+                            .background(Blue50)
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            "${entries.size}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = Blue500,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── Search bar ────────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (dark) DarkSurface else LightSurface)
+                    .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(14.dp))
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.Search, null,
+                    tint = if (dark) TextSecondary else TextSecondaryLight,
+                    modifier = Modifier.size(16.dp)
+                )
+                BasicTextField(
+                    value         = searchQuery,
+                    onValueChange = { vm.setSearch(it) },
+                    modifier      = Modifier.weight(1f),
+                    textStyle     = MaterialTheme.typography.bodyMedium.copy(
+                        color = if (dark) TextPrimary else TextPrimaryLight
+                    ),
+                    cursorBrush   = SolidColor(Blue500),
+                    singleLine    = true,
+                    decorationBox = { inner ->
+                        if (searchQuery.isEmpty()) {
+                            Text(
+                                "Search saved content…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (dark) TextSecondary else TextSecondaryLight
+                            )
+                        }
+                        inner()
+                    }
+                )
+                if (searchQuery.isNotEmpty()) {
+                    Icon(
+                        Icons.Default.Close, "Clear",
+                        tint = if (dark) TextSecondary else TextSecondaryLight,
+                        modifier = Modifier.size(16.dp).clickable { vm.setSearch("") }
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            // ── Filter chips ──────────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
+            ) {
+                VaultChip("All", selectedType == null, Blue500, dark) { vm.setFilter(null) }
+                EntryType.entries.forEach { type ->
+                    VaultChip(
+                        label    = type.label,
+                        selected = selectedType == type,
+                        color    = typeColor(type),
+                        dark     = dark,
+                        onClick  = { vm.setFilter(if (selectedType == type) null else type) }
+                    )
+                }
+            }
+
+            // ── Stat pills ────────────────────────────────────────────────────
+            if (selectedType == null && searchQuery.isBlank() && entries.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    EntryType.entries.forEach { type ->
+                        val c = entries.count { it.type == type }
+                        if (c > 0) VaultStatPill(type.label, c, typeColor(type), dark)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(14.dp))
+
+            // ── Content ───────────────────────────────────────────────────────
+            if (entries.isEmpty()) {
+                VaultEmptyState(dark, searchQuery.isNotBlank())
+            } else {
+                LazyColumn(
+                    contentPadding      = PaddingValues(horizontal = 20.dp, vertical = 2.dp),
+                    verticalArrangement = Arrangement.spacedBy(9.dp)
+                ) {
+                    items(entries, key = { it.id }) { entry ->
+                        VaultEntryCard(
+                            entry    = entry,
+                            dark     = dark,
+                            onClick  = { onOpenEntry(entry.id) },
+                            onDelete = { vm.delete(entry) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(8.dp)) }
+                }
+            }
         }
     }
 }
 
+// ── Filter chip ───────────────────────────────────────────────────────────────
+
 @Composable
-private fun FilterChip(
-    label      : String,
-    selected   : Boolean,
-    isDarkTheme: Boolean,
-    color      : Color,
-    onClick    : () -> Unit
-) {
+private fun VaultChip(label: String, selected: Boolean, color: Color, dark: Boolean, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(20.dp))
-            .background(if (selected) color.copy(0.15f) else if (isDarkTheme) DarkGlass else LightGlass)
-            .border(0.5.dp,
-                if (selected) color.copy(0.4f) else if (isDarkTheme) Color.White.copy(0.08f) else Color.White.copy(0.5f),
-                RoundedCornerShape(20.dp))
+            .background(
+                if (selected) color.copy(0.10f)
+                else if (dark) DarkSurface else LightSurface
+            )
+            .border(
+                1.dp,
+                if (selected) color.copy(0.30f) else if (dark) DarkBorder else LightBorder,
+                RoundedCornerShape(20.dp)
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 7.dp)
     ) {
-        Text(label, style = MaterialTheme.typography.labelMedium,
-            color = if (selected) color else if (isDarkTheme) TextSecondary else TextSecondaryLight,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+        Text(
+            label,
+            style      = MaterialTheme.typography.labelMedium,
+            color      = if (selected) color else if (dark) TextSecondary else TextSecondaryLight,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 
+// ── Stat pill ─────────────────────────────────────────────────────────────────
+
 @Composable
-private fun LibraryEntryCard(
-    entry      : LibraryEntry,
-    isDarkTheme: Boolean,
-    onClick    : () -> Unit,
-    onDelete   : () -> Unit
+private fun VaultStatPill(label: String, count: Int, color: Color, dark: Boolean) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (dark) DarkSurface else LightSurface)
+            .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(10.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment     = Alignment.CenterVertically
+    ) {
+        Box(modifier = Modifier.size(5.dp).background(color, CircleShape))
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = if (dark) TextSecondary else TextSecondaryLight)
+        Text("$count", style = MaterialTheme.typography.labelSmall,
+            color = color, fontWeight = FontWeight.Bold)
+    }
+}
+
+// ── Entry card ────────────────────────────────────────────────────────────────
+
+@Composable
+private fun VaultEntryCard(
+    entry: LibraryEntry, dark: Boolean, onClick: () -> Unit, onDelete: () -> Unit
 ) {
     val color = typeColor(entry.type)
     val fmt   = remember { SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault()) }
+    var confirmDelete by remember { mutableStateOf(false) }
 
-    var showDeleteConfirm by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (dark) DarkSurface else LightSurface)
+            .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+    ) {
+        // Top accent strip
+        Box(modifier = Modifier.fillMaxWidth().height(2.5.dp).background(color.copy(0.35f)))
 
-    GlassCard(darkTheme = isDarkTheme, onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Type badge
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Box(
-                modifier = Modifier.size(40.dp).background(color.copy(0.15f), RoundedCornerShape(10.dp)),
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(color.copy(0.09f), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(typeIcon(entry.type), null, tint = color, modifier = Modifier.size(20.dp))
+                Icon(typeIcon(entry.type), null, tint = color, modifier = Modifier.size(17.dp))
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(entry.title, style = MaterialTheme.typography.titleSmall,
-                    color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    entry.title,
+                    style      = MaterialTheme.typography.bodyMedium,
+                    color      = if (dark) TextPrimary else TextPrimaryLight,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines   = 1,
+                    overflow   = TextOverflow.Ellipsis
+                )
                 Spacer(Modifier.height(3.dp))
-                Text(entry.content.take(120).replace("\n", " "),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
-                Spacer(Modifier.height(6.dp))
+                Text(
+                    entry.content.take(100).replace("\n", " "),
+                    style      = MaterialTheme.typography.bodySmall,
+                    color      = if (dark) TextSecondary else TextSecondaryLight,
+                    maxLines   = 2,
+                    overflow   = TextOverflow.Ellipsis,
+                    lineHeight = 17.sp
+                )
+                Spacer(Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
+                    verticalAlignment     = Alignment.CenterVertically
                 ) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(color.copy(0.12f))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(color.copy(0.09f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
-                        Text(entry.type.label, style = MaterialTheme.typography.labelSmall, color = color)
+                        Text(
+                            entry.type.label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = color,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
-                    Text(fmt.format(Date(entry.createdAt)),
+                    Text(
+                        fmt.format(Date(entry.createdAt)),
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (isDarkTheme) TextDisabled else TextSecondaryLight)
+                        color = if (dark) TextDisabled else TextTertiary
+                    )
                 }
             }
 
-            // Delete button
-            if (!showDeleteConfirm) {
-                IconButton(onClick = { showDeleteConfirm = true },
-                    modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.DeleteOutline, "Delete",
-                        tint = if (isDarkTheme) TextDisabled else TextSecondaryLight,
-                        modifier = Modifier.size(18.dp))
+            if (!confirmDelete) {
+                IconButton(onClick = { confirmDelete = true }, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        Icons.Default.DeleteOutline, "Delete",
+                        tint = if (dark) TextDisabled else TextTertiary,
+                        modifier = Modifier.size(16.dp)
+                    )
                 }
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = { showDeleteConfirm = false },
-                        modifier = Modifier.size(32.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    IconButton(onClick = { confirmDelete = false }, modifier = Modifier.size(30.dp)) {
                         Icon(Icons.Default.Close, "Cancel",
-                            tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                            modifier = Modifier.size(16.dp))
+                            tint = if (dark) TextSecondary else TextSecondaryLight,
+                            modifier = Modifier.size(14.dp))
                     }
-                    IconButton(onClick = { onDelete(); showDeleteConfirm = false },
-                        modifier = Modifier.size(32.dp)) {
-                        Icon(Icons.Default.Delete, "Confirm delete",
-                            tint = ErrorRed, modifier = Modifier.size(16.dp))
+                    IconButton(
+                        onClick  = { onDelete(); confirmDelete = false },
+                        modifier = Modifier.size(30.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, "Confirm",
+                            tint = ErrorRed, modifier = Modifier.size(14.dp))
                     }
                 }
             }
@@ -251,46 +357,52 @@ private fun LibraryEntryCard(
     }
 }
 
+// ── Empty state ───────────────────────────────────────────────────────────────
+
 @Composable
-private fun LibraryEmptyState(isDarkTheme: Boolean, isSearching: Boolean) {
+private fun VaultEmptyState(dark: Boolean, isSearching: Boolean) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = 32.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
         Box(
-            modifier = Modifier.size(80.dp).background(Blue500.copy(0.10f), CircleShape),
+            modifier = Modifier
+                .size(72.dp)
+                .background(Blue50, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
                 if (isSearching) Icons.Default.SearchOff else Icons.Default.AutoStories,
-                null, tint = Blue500, modifier = Modifier.size(36.dp)
+                null, tint = Blue500, modifier = Modifier.size(30.dp)
             )
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            if (isSearching) "No results found" else "Library is empty",
-            style = MaterialTheme.typography.titleMedium,
-            color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+            if (isSearching) "No results found" else "Vault is empty",
+            style      = MaterialTheme.typography.titleMedium,
+            color      = if (dark) TextPrimary else TextPrimaryLight,
             fontWeight = FontWeight.SemiBold
         )
         Spacer(Modifier.height(8.dp))
         Text(
             if (isSearching) "Try different keywords"
-            else "Generate a PDF summary, OCR scan,\nor quiz — it will be saved here automatically.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            lineHeight = 22.sp
+            else "Generate a summary, OCR scan, or quiz —\nit will be saved here automatically.",
+            style       = MaterialTheme.typography.bodyMedium,
+            color       = if (dark) TextSecondary else TextSecondaryLight,
+            textAlign   = TextAlign.Center,
+            lineHeight  = 22.sp
         )
     }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Type helpers (public — used by ChatScreen save action) ────────────────────
 
 fun typeColor(type: EntryType): Color = when (type) {
     EntryType.PDF_SUMMARY -> Color(0xFF10B981)
-    EntryType.OCR         -> Color(0xFF3B82F6)
+    EntryType.OCR         -> Blue500
     EntryType.SCREENSHOT  -> Color(0xFF8B5CF6)
     EntryType.QUIZ        -> Color(0xFF10B981)
     EntryType.NOTE        -> Color(0xFFF59E0B)

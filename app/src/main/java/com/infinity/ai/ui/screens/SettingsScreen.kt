@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -72,11 +73,14 @@ fun SettingsScreen(isDarkTheme: Boolean, bottomPadding: Dp, onToggleTheme: () ->
                 Row(verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     Box(
-                        modifier = Modifier.size(52.dp)
-                            .background(Blue50, CircleShape),
+                        modifier = Modifier.size(50.dp)
+                            .background(
+                                Brush.linearGradient(listOf(Blue500, Blue400)),
+                                CircleShape
+                            ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("∞", fontSize = 22.sp, color = Blue500, fontWeight = FontWeight.SemiBold)
+                        Text("∞", fontSize = 21.sp, color = Color.White, fontWeight = FontWeight.Bold)
                     }
                     Column {
                         Text("Infinity User", style = MaterialTheme.typography.titleMedium,
@@ -88,7 +92,7 @@ fun SettingsScreen(isDarkTheme: Boolean, bottomPadding: Dp, onToggleTheme: () ->
                     Spacer(Modifier.weight(1f))
                     Icon(Icons.Default.ChevronRight, null,
                         tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                        modifier = Modifier.size(18.dp))
+                        modifier = Modifier.size(17.dp))
                 }
             }
 

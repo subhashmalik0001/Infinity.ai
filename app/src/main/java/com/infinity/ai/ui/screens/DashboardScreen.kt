@@ -1,10 +1,10 @@
 package com.infinity.ai.ui.screens
 
-import androidx.compose.animation.*
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -14,10 +14,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -25,256 +26,415 @@ import androidx.compose.ui.unit.sp
 import com.infinity.ai.ui.components.*
 import com.infinity.ai.ui.theme.*
 
-// ── Exact same signature as before — navigation untouched ─────────────────────
 @Composable
 fun DashboardScreen(
-    isDarkTheme: Boolean,
-    orbState: OrbState,
-    bottomPadding: Dp,
-    onNavigateToChat: () -> Unit,
-    onNavigateToVoice: () -> Unit,
-    onOrbTap: () -> Unit
+    isDarkTheme            : Boolean,
+    orbState               : OrbState,
+    bottomPadding          : Dp,
+    onNavigateToChat       : () -> Unit,
+    onNavigateToVoice      : () -> Unit,
+    onOrbTap               : () -> Unit,
+    onNavigateToCircle     : () -> Unit = onOrbTap,
+    onNavigateToOcr        : () -> Unit = onNavigateToChat,
+    onNavigateToPdf        : () -> Unit = onNavigateToChat,
+    onNavigateToQuiz       : () -> Unit = onNavigateToChat,
+    onNavigateToScreenshot : () -> Unit = onNavigateToChat
 ) {
-    val scroll = rememberScrollState()
+    val dark = isDarkTheme
+    val bg   = if (dark) DarkBg else LightBg
 
-    GradientBackground(darkTheme = isDarkTheme, modifier = Modifier.fillMaxSize()) {
+    GradientBackground(darkTheme = dark, modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .verticalScroll(scroll)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
         ) {
             Spacer(Modifier.height(20.dp))
 
-            // ── Header ────────────────────────────────────────────────────────
+            // ── Top bar ───────────────────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     Box(
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier
+                            .size(34.dp)
                             .background(Blue50, CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("∞", fontSize = 18.sp, fontWeight = FontWeight.Medium, color = Blue500)
+                        Text("∞", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Blue500)
                     }
-                    Text("Infinity", style = MaterialTheme.typography.titleMedium,
-                        color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                        fontWeight = FontWeight.SemiBold)
+                    Column {
+                        Text(
+                            "Infinity AI",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (dark) TextPrimary else TextPrimaryLight,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
-                DashHeaderIcon(Icons.Default.Notifications, isDarkTheme) {}
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            // ── Greeting ──────────────────────────────────────────────────────
-            val greeting = remember {
-                val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-                when { hour < 12 -> "Good morning" ; hour < 17 -> "Good afternoon" ; else -> "Good evening" }
-            }
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                Text(greeting, style = MaterialTheme.typography.bodyMedium,
-                    color = if (isDarkTheme) TextSecondary else TextSecondaryLight)
-                Spacer(Modifier.height(2.dp))
-                Text("Welcome back", style = MaterialTheme.typography.headlineMedium,
-                    color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                    fontWeight = FontWeight.Bold)
-            }
-
-            Spacer(Modifier.height(20.dp))
-
-            // ── Search bar ────────────────────────────────────────────────────
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(if (isDarkTheme) DarkSurface else LightSurface)
-                    .border(1.dp,
-                        if (isDarkTheme) DarkBorder else LightBorder,
-                        RoundedCornerShape(14.dp))
-                    .clickable(onClick = onNavigateToChat)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(Icons.Default.Search, null,
-                    tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                    modifier = Modifier.size(18.dp))
-                Text("Ask Infinity anything...",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                    modifier = Modifier.weight(1f))
                 Box(
                     modifier = Modifier
-                        .size(32.dp)
-                        .background(Blue500, CircleShape)
-                        .clickable(onClick = onNavigateToVoice)
-                        .semantics { contentDescription = "Voice input" },
+                        .size(38.dp)
+                        .background(
+                            if (dark) DarkSurface else LightSurface,
+                            CircleShape
+                        )
+                        .border(1.dp, if (dark) DarkBorder else LightBorder, CircleShape)
+                        .clickable {},
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(16.dp))
-                }
-            }
-
-            Spacer(Modifier.height(28.dp))
-
-            // ── AI Orb ────────────────────────────────────────────────────────
-            Box(
-                modifier = Modifier.fillMaxWidth().height(220.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                AiBodyOrb(
-                    orbState    = orbState,
-                    isDarkTheme = isDarkTheme,
-                    size        = 200.dp,
-                    modifier    = Modifier.clickable(onClick = onOrbTap)
-                )
-                AnimatedContent(
-                    targetState = orbState,
-                    transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(300)) },
-                    label = "stateLabel",
-                    modifier = Modifier.align(Alignment.BottomCenter)
-                ) { state ->
-                    Text(
-                        text = when (state) {
-                            OrbState.Idle       -> "Tap to chat"
-                            OrbState.Loading    -> "Loading model..."
-                            OrbState.Thinking   -> "Thinking..."
-                            OrbState.Responding -> "Responding..."
-                            OrbState.Error      -> "Something went wrong"
-                        },
-                        style = MaterialTheme.typography.labelMedium,
-                        color = when (state) {
-                            OrbState.Error -> ErrorRed
-                            OrbState.Idle  -> if (isDarkTheme) TextSecondary else TextSecondaryLight
-                            else           -> Blue500
-                        },
-                        fontWeight = FontWeight.Medium
+                    Icon(
+                        Icons.Default.Notifications, null,
+                        tint = if (dark) TextSecondary else TextSecondaryLight,
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // ── Quick Actions 2×4 grid ────────────────────────────────────────
-            Column(modifier = Modifier.padding(horizontal = 24.dp)) {
-                DashSectionLabel("Quick Actions", isDarkTheme)
-                Spacer(Modifier.height(12.dp))
+            // ── Hero greeting ─────────────────────────────────────────────────
+            val greeting = remember {
+                val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+                when { h < 12 -> "Good morning" ; h < 17 -> "Good afternoon" ; else -> "Good evening" }
+            }
+            Text(
+                greeting,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (dark) TextSecondary else TextSecondaryLight
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                "What can I help\nyou with?",
+                style = MaterialTheme.typography.headlineLarge,
+                color = if (dark) TextPrimary else TextPrimaryLight,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 40.sp
+            )
 
-                // Use a fixed-height grid (4 rows × ~72dp = 308dp + spacing)
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+            Spacer(Modifier.height(20.dp))
+
+            // ── Search / Ask bar ──────────────────────────────────────────────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (dark) DarkSurface else LightSurface)
+                    .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(14.dp))
+                    .clickable(onClick = onNavigateToChat)
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.Search, null,
+                    tint = if (dark) TextSecondary else TextSecondaryLight,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    "Ask Infinity anything…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (dark) TextSecondary else TextSecondaryLight,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 400.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement   = Arrangement.spacedBy(10.dp),
-                    userScrollEnabled = false
+                        .size(28.dp)
+                        .background(Blue500, CircleShape)
+                        .clickable(onClick = onNavigateToVoice),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(quickActions) { qa ->
-                        QuickActionCell(
-                            icon       = qa.icon,
-                            label      = qa.label,
-                            onClick    = when (qa.label) {
-                                "Chat"        -> onNavigateToChat
-                                "Voice"       -> onNavigateToVoice
-                                else          -> onNavigateToChat
-                            },
-                            isDarkTheme = isDarkTheme
-                        )
-                    }
+                    Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(14.dp))
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
 
-            // ── Suggestions (same content as before) ──────────────────────────
-            Column(modifier = Modifier.padding(horizontal = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                DashSectionLabel("Suggestions", isDarkTheme)
-                Spacer(Modifier.height(4.dp))
-                AITaskCard(Icons.Default.Chat,     "Start a conversation", "Ask Infinity anything",       Blue500,           onNavigateToChat,  darkTheme = isDarkTheme)
-                AITaskCard(Icons.Default.Mic,      "Voice command",        "Speak to activate Infinity",  Blue500,           onNavigateToVoice, darkTheme = isDarkTheme)
-                AITaskCard(Icons.Default.EditNote, "Smart Notes",          "AI-powered note taking",      Blue500,           onNavigateToChat,  darkTheme = isDarkTheme)
-                AITaskCard(Icons.Default.Terminal, "Run command",          "Execute AI commands",         Blue500,           onNavigateToChat,  darkTheme = isDarkTheme)
+            // ══════════════════════════════════════════════════════════════════
+            // ROW 1 — Chat HERO (full width)
+            // ══════════════════════════════════════════════════════════════════
+            ChatHeroCard(
+                orbState  = orbState,
+                dark      = dark,
+                onClick   = onNavigateToChat,
+                modifier  = Modifier.fillMaxWidth().height(160.dp)
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // ══════════════════════════════════════════════════════════════════
+            // ROW 2 — Circle Learn (wide-left) | Voice + OCR (stacked-right)
+            // ══════════════════════════════════════════════════════════════════
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BentoFeatureCard(
+                    icon        = Icons.Default.RadioButtonChecked,
+                    title       = "Circle\nLearn",
+                    subtitle    = "Circle to explain",
+                    accent      = Blue500,
+                    dark        = dark,
+                    onClick     = onNavigateToCircle,
+                    modifier    = Modifier.weight(1.15f).height(248.dp)
+                )
+                Column(
+                    modifier = Modifier.weight(0.85f),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    BentoSmallCard(
+                        icon    = Icons.Default.Mic,
+                        label   = "Voice",
+                        dark    = dark,
+                        onClick = onNavigateToVoice,
+                        modifier = Modifier.fillMaxWidth().height(118.dp)
+                    )
+                    BentoSmallCard(
+                        icon    = Icons.Default.DocumentScanner,
+                        label   = "OCR Scan",
+                        dark    = dark,
+                        onClick = onNavigateToOcr,
+                        modifier = Modifier.fillMaxWidth().height(118.dp)
+                    )
+                }
             }
 
-            Spacer(Modifier.height(bottomPadding + 20.dp))
+            Spacer(Modifier.height(12.dp))
+
+            // ══════════════════════════════════════════════════════════════════
+            // ROW 3 — PDF | Quiz | Screenshot (3 equal small cards)
+            // ══════════════════════════════════════════════════════════════════
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                BentoMiniCard(
+                    icon    = Icons.Default.FolderOpen,
+                    label   = "PDF",
+                    dark    = dark,
+                    onClick = onNavigateToPdf,
+                    modifier = Modifier.weight(1f).height(92.dp)
+                )
+                BentoMiniCard(
+                    icon    = Icons.Default.Quiz,
+                    label   = "Quiz",
+                    dark    = dark,
+                    onClick = onNavigateToQuiz,
+                    modifier = Modifier.weight(1f).height(92.dp)
+                )
+                BentoMiniCard(
+                    icon    = Icons.Default.ScreenSearchDesktop,
+                    label   = "Screenshot",
+                    dark    = dark,
+                    onClick = onNavigateToScreenshot,
+                    modifier = Modifier.weight(1f).height(92.dp)
+                )
+            }
+
+            Spacer(Modifier.height(bottomPadding + 28.dp))
         }
     }
 }
 
-// ── Quick action data ─────────────────────────────────────────────────────────
-
-private data class QuickAction(val icon: ImageVector, val label: String)
-
-private val quickActions = listOf(
-    QuickAction(Icons.Default.Chat,             "Chat"),
-    QuickAction(Icons.Default.DocumentScanner,  "OCR"),
-    QuickAction(Icons.Default.FolderOpen,       "PDF"),
-    QuickAction(Icons.Default.EditNote,         "Notes"),
-    QuickAction(Icons.Default.Style,            "Flashcards"),
-    QuickAction(Icons.Default.Quiz,             "Quiz"),
-    QuickAction(Icons.Default.RecordVoiceOver,  "Viva"),
-    QuickAction(Icons.Default.RadioButtonChecked, "Circle"),
-)
-
-// ── Private composables ───────────────────────────────────────────────────────
+// ── Chat Hero Card ─────────────────────────────────────────────────────────────
 
 @Composable
-private fun DashHeaderIcon(icon: ImageVector, isDarkTheme: Boolean, onClick: () -> Unit) {
+private fun ChatHeroCard(
+    orbState : OrbState,
+    dark     : Boolean,
+    onClick  : () -> Unit,
+    modifier : Modifier = Modifier
+) {
+    val src     = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val scale   by animateFloatAsState(
+        if (pressed) 0.98f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "hs"
+    )
+
+    val statusLabel = when (orbState) {
+        OrbState.Idle       -> "Ready · tap to start"
+        OrbState.Loading    -> "Loading model…"
+        OrbState.Thinking   -> "Thinking…"
+        OrbState.Responding -> "Responding…"
+        OrbState.Error      -> "Error · tap to retry"
+    }
+    val statusColor = when (orbState) {
+        OrbState.Idle       -> SuccessGreen
+        OrbState.Loading    -> WarnAmber
+        OrbState.Thinking   -> Blue400
+        OrbState.Responding -> Blue400
+        OrbState.Error      -> ErrorRed
+    }
+
     Box(
-        modifier = Modifier
-            .size(40.dp)
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
             .background(
-                if (isDarkTheme) DarkSurface else LightSurface,
-                CircleShape
+                if (dark)
+                    Brush.linearGradient(listOf(Color(0xFF1A2744), Color(0xFF0F1A30)))
+                else
+                    Brush.linearGradient(listOf(Blue500, Blue600))
             )
-            .border(1.dp,
-                if (isDarkTheme) DarkBorder else LightBorder,
-                CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(22.dp)
     ) {
-        Icon(icon, null,
-            tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-            modifier = Modifier.size(18.dp))
+        // Subtle orb glow in top-right
+        Box(
+            modifier = Modifier
+                .size(120.dp)
+                .align(Alignment.TopEnd)
+                .offset(x = 20.dp, y = (-20).dp)
+                .background(
+                    Brush.radialGradient(listOf(Blue400.copy(0.25f), Color.Transparent)),
+                    CircleShape
+                )
+        )
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(Color.White.copy(0.15f), RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.Chat, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                }
+                Column {
+                    Text(
+                        "Chat with Infinity",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Box(modifier = Modifier.size(5.dp).background(statusColor, CircleShape))
+                        Text(
+                            statusLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(0.7f)
+                        )
+                    }
+                }
+            }
+            Text(
+                "Ask anything — fully offline, on-device AI.",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(0.65f),
+                lineHeight = 18.sp
+            )
+        }
     }
 }
 
-@Composable
-private fun DashSectionLabel(text: String, isDarkTheme: Boolean) {
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = 0.3.sp
-    )
-}
+// ── Bento Feature Card (tall, for Circle Learn) ───────────────────────────────
 
 @Composable
-private fun QuickActionCell(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    isDarkTheme: Boolean
+private fun BentoFeatureCard(
+    icon     : ImageVector,
+    title    : String,
+    subtitle : String,
+    accent   : Color,
+    dark     : Boolean,
+    onClick  : () -> Unit,
+    modifier : Modifier = Modifier
 ) {
+    val src     = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val scale   by animateFloatAsState(
+        if (pressed) 0.97f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "fs"
+    )
+
     Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (isDarkTheme) DarkSurface else LightSurface)
-            .border(1.dp,
-                if (isDarkTheme) DarkBorder else LightBorder,
-                RoundedCornerShape(14.dp))
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp, horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(7.dp)
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(20.dp))
+            .background(if (dark) DarkSurface else LightSurface)
+            .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(20.dp))
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(18.dp),
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .background(Blue50, RoundedCornerShape(14.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(22.dp))
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = if (dark) TextPrimary else TextPrimaryLight,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 22.sp
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (dark) TextSecondary else TextSecondaryLight
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    "Open",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Blue500,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Icon(Icons.Default.ArrowForward, null, tint = Blue500, modifier = Modifier.size(11.dp))
+            }
+        }
+    }
+}
+
+// ── Bento Small Card ──────────────────────────────────────────────────────────
+
+@Composable
+private fun BentoSmallCard(
+    icon     : ImageVector,
+    label    : String,
+    dark     : Boolean,
+    onClick  : () -> Unit,
+    modifier : Modifier = Modifier
+) {
+    val src     = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val scale   by animateFloatAsState(
+        if (pressed) 0.96f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "ss"
+    )
+
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(18.dp))
+            .background(if (dark) DarkSurface else LightSurface)
+            .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(18.dp))
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(14.dp),
+        verticalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
             modifier = Modifier.size(34.dp).background(Blue50, RoundedCornerShape(10.dp)),
@@ -284,10 +444,51 @@ private fun QuickActionCell(
         }
         Text(
             label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (dark) TextPrimary else TextPrimaryLight,
+            fontWeight = FontWeight.SemiBold
+        )
+    }
+}
+
+// ── Bento Mini Card (bottom row) ──────────────────────────────────────────────
+
+@Composable
+private fun BentoMiniCard(
+    icon     : ImageVector,
+    label    : String,
+    dark     : Boolean,
+    onClick  : () -> Unit,
+    modifier : Modifier = Modifier
+) {
+    val src     = remember { MutableInteractionSource() }
+    val pressed by src.collectIsPressedAsState()
+    val scale   by animateFloatAsState(
+        if (pressed) 0.95f else 1f, spring(Spring.DampingRatioMediumBouncy), label = "ms"
+    )
+
+    Column(
+        modifier = modifier
+            .scale(scale)
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (dark) DarkSurface else LightSurface)
+            .border(1.dp, if (dark) DarkBorder else LightBorder, RoundedCornerShape(16.dp))
+            .clickable(interactionSource = src, indication = null, onClick = onClick)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+        horizontalAlignment = Alignment.Start
+    ) {
+        Box(
+            modifier = Modifier.size(30.dp).background(Blue50, RoundedCornerShape(9.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(15.dp))
+        }
+        Text(
+            label,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1
+            color = if (dark) TextPrimary else TextPrimaryLight,
+            fontWeight = FontWeight.SemiBold
         )
     }
 }

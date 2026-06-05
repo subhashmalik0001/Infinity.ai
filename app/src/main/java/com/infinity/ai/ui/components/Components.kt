@@ -27,14 +27,13 @@ fun GradientBackground(
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
+    val bgModifier = if (darkTheme)
+        modifier.background(Brush.verticalGradient(listOf(Color(0xFF0A0E1A), DarkBg, Color(0xFF0C1120))))
+    else
+        modifier.background(Color(0xFFF8FAFC))
     Box(
-        modifier = modifier.background(
-            if (darkTheme)
-                Brush.verticalGradient(listOf(Color(0xFF0B0F1A), DarkBg, Color(0xFF0D1320)))
-            else
-                Brush.verticalGradient(listOf(LightBg, LightBg, Color(0xFFEEF2F8)))
-        ),
-        content = content
+        modifier = bgModifier,
+        content  = content
     )
 }
 
@@ -47,13 +46,9 @@ fun GlassCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(16.dp))
             .background(if (darkTheme) DarkSurface else LightSurface)
-            .border(
-                1.dp,
-                if (darkTheme) DarkBorder else LightBorder,
-                RoundedCornerShape(18.dp)
-            )
+            .border(1.dp, if (darkTheme) DarkBorder else LightBorder, RoundedCornerShape(16.dp))
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(16.dp),
         content = content
@@ -69,16 +64,16 @@ fun WaveformAnimation(
     if (!isActive) {
         Row(
             modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            repeat(24) {
+            repeat(20) {
                 Box(
                     modifier = Modifier
-                        .width(3.dp)
+                        .width(2.5.dp)
                         .height(3.dp)
                         .clip(RoundedCornerShape(2.dp))
-                        .background(color)
+                        .background(color.copy(alpha = 0.35f))
                 )
             }
         }
@@ -87,22 +82,22 @@ fun WaveformAnimation(
     val inf = rememberInfiniteTransition(label = "wave")
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        repeat(24) { i ->
+        repeat(20) { i ->
             val height by inf.animateFloat(
                 initialValue = 3f,
-                targetValue = if (isActive) (6 + (i % 6) * 6).toFloat() else 3f,
+                targetValue = if (isActive) (5 + (i % 5) * 5).toFloat() else 3f,
                 animationSpec = infiniteRepeatable(
-                    tween(280 + i * 35, easing = EaseInOut),
+                    tween(300 + i * 30, easing = EaseInOut),
                     RepeatMode.Reverse
                 ),
                 label = "bar$i"
             )
             Box(
                 modifier = Modifier
-                    .width(3.dp)
+                    .width(2.5.dp)
                     .height(height.dp)
                     .clip(RoundedCornerShape(2.dp))
                     .background(color)
@@ -124,25 +119,21 @@ fun AITaskCard(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(14.dp))
             .background(if (darkTheme) DarkSurface else LightSurface)
-            .border(
-                1.dp,
-                if (darkTheme) DarkBorder else LightBorder,
-                RoundedCornerShape(16.dp)
-            )
+            .border(1.dp, if (darkTheme) DarkBorder else LightBorder, RoundedCornerShape(14.dp))
             .clickable(onClick = onClick)
-            .padding(16.dp),
+            .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(40.dp)
                 .background(Blue50, RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = Blue500, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(19.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -151,7 +142,7 @@ fun AITaskCard(
                 color = if (darkTheme) TextPrimary else TextPrimaryLight,
                 fontWeight = FontWeight.SemiBold
             )
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(1.dp))
             Text(
                 subtitle,
                 style = MaterialTheme.typography.bodySmall,
@@ -160,7 +151,7 @@ fun AITaskCard(
         }
         Icon(
             Icons.Default.ChevronRight, null,
-            tint = if (darkTheme) TextSecondary else TextSecondaryLight,
+            tint = Blue500.copy(alpha = 0.6f),
             modifier = Modifier.size(16.dp)
         )
     }

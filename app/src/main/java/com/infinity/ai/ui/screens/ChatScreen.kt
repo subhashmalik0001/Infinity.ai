@@ -78,8 +78,6 @@ fun ChatScreen(
         if (count > 0) listState.animateScrollToItem(count - 1)
     }
 
-    // ── Action handlers (UI only — no ViewModel changes) ──────────────────────
-
     fun copyToClipboard(text: String, label: String = "AI Response") {
         val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         cm.setPrimaryClip(ClipData.newPlainText(label, text))
@@ -113,8 +111,8 @@ fun ChatScreen(
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(
                     snackbarData    = data,
-                    containerColor  = if (isDarkTheme) DarkSurfaceElevated else LightSurface,
-                    contentColor    = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                    containerColor  = if (isDarkTheme) DarkSurfaceElevated else TextPrimaryLight,
+                    contentColor    = if (isDarkTheme) TextPrimary else LightSurface,
                     shape           = RoundedCornerShape(12.dp),
                     modifier        = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
@@ -148,7 +146,6 @@ fun ChatScreen(
                         onSuggestionClick = { chatViewModel.startFromSuggestion(it) }
                     )
                 } else {
-                    // Find the prompt paired with each AI message (the user message just before it)
                     val promptMap = remember(messages) {
                         buildMap {
                             messages.forEachIndexed { i, msg ->
@@ -163,19 +160,19 @@ fun ChatScreen(
                     LazyColumn(
                         state           = listState,
                         modifier        = Modifier.weight(1f),
-                        contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         items(messages, key = { it.id }) { msg ->
                             val streaming = isGenerating && msg == messages.last() && !msg.isUser
                             ChatBubble(
-                                message     = msg,
-                                isDarkTheme = isDarkTheme,
-                                isStreaming = streaming,
-                                prompt      = promptMap[msg.id] ?: "",
-                                onCopy      = { copyToClipboard(msg.text) },
-                                onShare     = { shareText(promptMap[msg.id] ?: "", msg.text) },
-                                onSave      = { saveToVault(context, promptMap[msg.id] ?: "", msg.text) },
+                                message      = msg,
+                                isDarkTheme  = isDarkTheme,
+                                isStreaming  = streaming,
+                                prompt       = promptMap[msg.id] ?: "",
+                                onCopy       = { copyToClipboard(msg.text) },
+                                onShare      = { shareText(promptMap[msg.id] ?: "", msg.text) },
+                                onSave       = { saveToVault(context, promptMap[msg.id] ?: "", msg.text) },
                                 onRegenerate = {
                                     val p = promptMap[msg.id] ?: ""
                                     if (p.isNotBlank()) chatViewModel.startFromSuggestion(p)
@@ -199,85 +196,118 @@ fun ChatScreen(
     }
 }
 
-// ── Header ────────────────────────────────────────────────────────────────────
+// ── Header ─────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ChatHeader(isDarkTheme: Boolean, aiState: AIInferenceState, onClearChat: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        val dotColor = when (aiState) {
+            is AIInferenceState.Idle       -> SuccessGreen
+            is AIInferenceState.Loading    -> WarnAmber
+            is AIInferenceState.Thinking   -> Blue500
+            is AIInferenceState.Responding -> Blue500
+            is AIInferenceState.Error      -> ErrorRed
+        }
+        val statusLabel = when (aiState) {
+            is AIInferenceState.Idle       -> "Ready"
+            is AIInferenceState.Loading    -> "Loading…"
+            is AIInferenceState.Thinking   -> "Thinking…"
+            is AIInferenceState.Responding -> "Responding…"
+            is AIInferenceState.Error      -> "Error"
+        }
+
         Row(
             modifier = Modifier
                 .clip(RoundedCornerShape(50.dp))
-                .background(if (isDarkTheme) DarkGlass else LightGlass)
-                .border(0.5.dp,
-                    if (isDarkTheme) Color.White.copy(0.1f) else Color.White.copy(0.6f),
-                    RoundedCornerShape(50.dp))
+                .background(if (isDarkTheme) DarkSurface else LightSurface)
+                .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, RoundedCornerShape(50.dp))
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            val dotColor = when (aiState) {
-                is AIInferenceState.Idle       -> Color(0xFF22C55E)
-                is AIInferenceState.Loading    -> Color(0xFFF59E0B)
-                is AIInferenceState.Thinking   -> Blue500
-                is AIInferenceState.Responding -> Blue500
-                is AIInferenceState.Error      -> Color(0xFFEF4444)
-            }
             Box(modifier = Modifier.size(6.dp).background(dotColor, CircleShape))
-            Text("Infinity AI", style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium)
             Text(
-                text = when (aiState) {
-                    is AIInferenceState.Idle       -> "Ready"
-                    is AIInferenceState.Loading    -> "Loading..."
-                    is AIInferenceState.Thinking   -> "Thinking..."
-                    is AIInferenceState.Responding -> "Responding..."
-                    is AIInferenceState.Error      -> "Error"
-                },
+                "Infinity AI",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (isDarkTheme) TextPrimary else TextPrimaryLight
+            )
+            Text(
+                statusLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = dotColor
             )
         }
+
         Spacer(Modifier.weight(1f))
-        IconButton(
-            onClick  = onClearChat,
-            modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(
+                    if (isDarkTheme) DarkSurface else LightSurface,
+                    CircleShape
+                )
+                .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, CircleShape)
+                .clickable(onClick = onClearChat),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.Default.Add, "New chat",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            Icon(
+                Icons.Default.Add, "New chat",
+                tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }
 
-// ── Extraction progress bar ───────────────────────────────────────────────────
+// ── Extraction progress bar ────────────────────────────────────────────────────
 
 @Composable
 private fun ExtractionProgressBar(progress: Float, isDarkTheme: Boolean) {
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Setting up AI model...", style = MaterialTheme.typography.labelSmall,
-                color = if (isDarkTheme) TextSecondary else TextSecondaryLight)
-            Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall,
-                color = Blue500, fontWeight = FontWeight.SemiBold)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                "Setting up AI model…",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isDarkTheme) TextSecondary else TextSecondaryLight
+            )
+            Text(
+                "${(progress * 100).toInt()}%",
+                style = MaterialTheme.typography.labelSmall,
+                color = Blue500,
+                fontWeight = FontWeight.SemiBold
+            )
         }
         Spacer(Modifier.height(6.dp))
         LinearProgressIndicator(
             progress        = { progress },
-            modifier        = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+            modifier        = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
             color           = Blue500,
-            trackColor      = Blue500.copy(alpha = 0.15f)
+            trackColor      = Blue50
         )
         Spacer(Modifier.height(4.dp))
-        Text("This only happens once on first launch",
+        Text(
+            "This only happens once on first launch",
             style = MaterialTheme.typography.labelSmall,
-            color = if (isDarkTheme) TextDisabled else TextSecondaryLight.copy(0.6f))
+            color = if (isDarkTheme) TextDisabled else TextTertiary
+        )
     }
 }
 
-// ── Empty state ───────────────────────────────────────────────────────────────
+// ── Empty state ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun EmptyState(
@@ -287,42 +317,58 @@ private fun EmptyState(
     onSuggestionClick: (String) -> Unit
 ) {
     Column(
-        modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.Start
     ) {
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(16.dp))
         Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            AiBodyOrb(orbState = aiState.toOrbState(), isDarkTheme = isDarkTheme, size = 120.dp)
+            AiBodyOrb(orbState = aiState.toOrbState(), isDarkTheme = isDarkTheme, size = 110.dp)
         }
-        Spacer(Modifier.height(20.dp))
-        Text("Hey, there!", style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Light)
-        Row {
-            Text("How can I ", style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Light)
-            Text("help you?", style = MaterialTheme.typography.headlineMedium,
-                color = Blue500, fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(Modifier.height(20.dp))
-        Text("THINGS YOU CAN DO", style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, letterSpacing = 1.sp)
-        Spacer(Modifier.height(12.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "Hey there 👋",
+            style = MaterialTheme.typography.headlineMedium,
+            color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+            fontWeight = FontWeight.Bold
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "How can I help you today?",
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (isDarkTheme) TextSecondary else TextSecondaryLight
+        )
+        Spacer(Modifier.height(24.dp))
+        Text(
+            "SUGGESTIONS",
+            style = MaterialTheme.typography.labelSmall,
+            color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
+            letterSpacing = 1.2.sp
+        )
+        Spacer(Modifier.height(10.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(
                 Triple(Icons.Default.Chat,     "Ask me anything",    "Start a conversation"),
                 Triple(Icons.Default.Code,     "Help me write code", "Generate or review code"),
                 Triple(Icons.Default.EditNote, "Summarize my notes", "AI-powered summaries"),
                 Triple(Icons.Default.Language, "Translate text",     "Any language supported")
             ).forEach { (icon, title, sub) ->
-                AITaskCard(icon = icon, title = title, subtitle = sub, iconBg = Blue500,
-                    onClick = { onSuggestionClick(title) }, darkTheme = isDarkTheme)
+                AITaskCard(
+                    icon     = icon,
+                    title    = title,
+                    subtitle = sub,
+                    iconBg   = Blue500,
+                    onClick  = { onSuggestionClick(title) },
+                    darkTheme = isDarkTheme
+                )
             }
         }
         Spacer(Modifier.height(16.dp))
     }
 }
 
-// ── Input bar ─────────────────────────────────────────────────────────────────
+// ── Input bar ──────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ChatInputBar(
@@ -335,17 +381,30 @@ private fun ChatInputBar(
     onVoice: () -> Unit
 ) {
     val canSend = input.isNotBlank() && !isGenerating
-    Surface(color = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f), tonalElevation = 0.dp) {
+
+    Surface(
+        color = if (isDarkTheme) DarkSurface.copy(alpha = 0.97f) else LightSurface,
+        tonalElevation = 0.dp
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(
+                        if (isDarkTheme) DarkSurfaceElevated else LightSurfaceElevated
+                    )
+                    .border(
+                        1.dp,
+                        if (isDarkTheme) DarkBorder else LightBorder,
+                        RoundedCornerShape(22.dp)
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -355,36 +414,46 @@ private fun ChatInputBar(
                     modifier      = Modifier.weight(1f),
                     enabled       = !isGenerating,
                     textStyle     = MaterialTheme.typography.bodyMedium.copy(
-                        color = MaterialTheme.colorScheme.onSurface, lineHeight = 20.sp
+                        color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                        lineHeight = 20.sp
                     ),
                     cursorBrush   = SolidColor(Blue500),
                     decorationBox = { inner ->
                         if (input.isEmpty()) {
                             Text(
-                                if (isGenerating) "Generating..." else "Message Infinity...",
+                                if (isGenerating) "Generating…" else "Message Infinity…",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (isDarkTheme) TextSecondary else TextSecondaryLight
                             )
                         }
                         inner()
                     },
                     keyboardOptions = KeyboardOptions(
-                        imeAction       = ImeAction.Send,
-                        capitalization  = KeyboardCapitalization.Sentences
+                        imeAction      = ImeAction.Send,
+                        capitalization = KeyboardCapitalization.Sentences
                     ),
                     keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
                     maxLines = 5
                 )
             }
+
+            // Send / Stop / Mic button
             Box(
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(46.dp)
                     .background(
                         when {
-                            isGenerating -> Color(0xFFEF4444)
+                            isGenerating -> ErrorRed
                             canSend      -> Blue500
-                            else         -> MaterialTheme.colorScheme.surfaceVariant
+                            else         -> if (isDarkTheme) DarkSurfaceElevated else LightSurfaceElevated
                         },
+                        CircleShape
+                    )
+                    .border(
+                        1.dp,
+                        if (!isGenerating && !canSend)
+                            if (isDarkTheme) DarkBorder else LightBorder
+                        else Color.Transparent,
                         CircleShape
                     )
                     .clickable {
@@ -408,26 +477,26 @@ private fun ChatInputBar(
                         else         -> "Voice"
                     },
                     tint     = if (canSend || isGenerating) Color.White
-                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(22.dp)
+                               else if (isDarkTheme) TextSecondary else TextSecondaryLight,
+                    modifier = Modifier.size(20.dp)
                 )
             }
         }
     }
 }
 
-// ── Chat bubble ───────────────────────────────────────────────────────────────
+// ── Chat bubble ────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ChatBubble(
-    message:      ChatMessage,
-    isDarkTheme:  Boolean,
-    isStreaming:  Boolean,
-    prompt:       String,
-    onCopy:       () -> Unit,
-    onShare:      () -> Unit,
-    onSave:       () -> Unit,
+    message     : ChatMessage,
+    isDarkTheme : Boolean,
+    isStreaming : Boolean,
+    prompt      : String,
+    onCopy      : () -> Unit,
+    onShare     : () -> Unit,
+    onSave      : () -> Unit,
     onRegenerate: () -> Unit
 ) {
     var showSheet by remember { mutableStateOf(false) }
@@ -436,29 +505,34 @@ private fun ChatBubble(
         modifier            = Modifier.fillMaxWidth(),
         horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start
     ) {
-        // ── AI label row ──────────────────────────────────────────────────────
         if (!message.isUser) {
             Row(
                 verticalAlignment     = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier              = Modifier.padding(bottom = 4.dp, start = 2.dp)
+                modifier              = Modifier.padding(bottom = 5.dp, start = 2.dp)
             ) {
                 Box(
-                    modifier           = Modifier.size(22.dp).background(Blue500.copy(0.15f), CircleShape),
-                    contentAlignment   = Alignment.Center
-                ) { Text("∞", style = MaterialTheme.typography.labelSmall, color = Blue500) }
-                Text("Infinity", style = MaterialTheme.typography.labelSmall,
-                    color = Blue500, fontWeight = FontWeight.SemiBold)
+                    modifier         = Modifier
+                        .size(20.dp)
+                        .background(Blue50, CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("∞", style = MaterialTheme.typography.labelSmall, color = Blue500, fontSize = 10.sp)
+                }
+                Text(
+                    "Infinity",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Blue500,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
 
-        // ── Bubble + action row ───────────────────────────────────────────────
         Row(
             verticalAlignment     = Alignment.Top,
             horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
             modifier              = Modifier.fillMaxWidth()
         ) {
-            // For AI messages: bubble first, actions after
             if (!message.isUser) {
                 AiBubbleContent(
                     message     = message,
@@ -468,45 +542,44 @@ private fun ChatBubble(
                         .weight(1f, fill = false)
                         .widthIn(max = 300.dp)
                         .combinedClickable(
-                            onClick      = {},
-                            onLongClick  = { if (!isStreaming && message.text.isNotBlank()) showSheet = true }
+                            onClick     = {},
+                            onLongClick = { if (!isStreaming && message.text.isNotBlank()) showSheet = true }
                         )
                 )
 
-                // Inline action icons — only shown after streaming is done
                 AnimatedVisibility(
                     visible = !isStreaming && message.text.isNotBlank(),
                     enter   = fadeIn(tween(200)) + slideInHorizontally { it / 2 },
                     exit    = fadeOut(tween(150))
                 ) {
                     Row(
-                        modifier              = Modifier.padding(start = 6.dp, top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier              = Modifier.padding(start = 4.dp, top = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(0.dp)
                     ) {
-                        BubbleActionIcon(Icons.Default.ContentCopy, "Copy",    onCopy)
-                        BubbleActionIcon(Icons.Default.Share,       "Share",   onShare)
-                        BubbleActionIcon(Icons.Default.BookmarkAdd, "Save",    onSave)
+                        BubbleActionIcon(Icons.Default.ContentCopy, "Copy",  onCopy)
+                        BubbleActionIcon(Icons.Default.Share,       "Share", onShare)
+                        BubbleActionIcon(Icons.Default.BookmarkAdd, "Save",  onSave)
                     }
                 }
             } else {
-                // User bubble — no actions
                 Box(
                     modifier = Modifier
                         .widthIn(max = 300.dp)
                         .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
                         .background(Blue500)
-                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                        .padding(horizontal = 14.dp, vertical = 11.dp)
                 ) {
-                    Text(message.text,
-                        style     = MaterialTheme.typography.bodyMedium,
-                        color     = Color.White,
-                        lineHeight = 22.sp)
+                    Text(
+                        message.text,
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = Color.White,
+                        lineHeight = 22.sp
+                    )
                 }
             }
         }
     }
 
-    // ── Long-press bottom sheet ───────────────────────────────────────────────
     if (showSheet) {
         MessageActionsSheet(
             onDismiss    = { showSheet = false },
@@ -518,46 +591,43 @@ private fun ChatBubble(
     }
 }
 
-// ── AI bubble content (text selection + code blocks) ─────────────────────────
+// ── AI bubble content ──────────────────────────────────────────────────────────
 
 @Composable
 private fun AiBubbleContent(
-    message:     ChatMessage,
-    isDarkTheme: Boolean,
-    isStreaming: Boolean,
-    modifier:    Modifier = Modifier
+    message     : ChatMessage,
+    isDarkTheme : Boolean,
+    isStreaming : Boolean,
+    modifier    : Modifier = Modifier
 ) {
-    val bubbleBg = if (isDarkTheme) DarkSurfaceElevated else LightSurface
-    val border   = if (isDarkTheme) Color.White.copy(0.08f) else LightBorder
-
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
-            .background(bubbleBg)
-            .border(0.5.dp, border, RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp))
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp))
+            .background(if (isDarkTheme) DarkSurface else LightSurface)
+            .border(
+                1.dp,
+                if (isDarkTheme) DarkBorder else LightBorder,
+                RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)
+            )
+            .padding(horizontal = 14.dp, vertical = 11.dp)
     ) {
         if (message.text.isEmpty() && isStreaming) {
             TypingDots(isDarkTheme)
         } else {
             val segments = remember(message.text) { parseMessageSegments(message.text) }
-            val displayText = if (isStreaming && message.text.isNotEmpty()) message.text + "▍"
-                              else message.text
 
             if (segments.size == 1 && segments[0] is MessageSegment.PlainText) {
-                // Fast path: no code blocks — use SelectionContainer directly
                 SelectionContainer {
                     Text(
-                        text      = if (isStreaming && message.text.isNotEmpty())
-                                        buildAnnotatedString { append(displayText) }
-                                    else buildAnnotatedString { append(message.text) },
-                        style     = MaterialTheme.typography.bodyMedium,
-                        color     = MaterialTheme.colorScheme.onSurface,
+                        text = buildAnnotatedString {
+                            append(if (isStreaming && message.text.isNotEmpty()) message.text + "▍" else message.text)
+                        },
+                        style      = MaterialTheme.typography.bodyMedium,
+                        color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
                         lineHeight = 22.sp
                     )
                 }
             } else {
-                // Has code blocks
                 val context = LocalContext.current
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     segments.forEach { seg ->
@@ -568,7 +638,7 @@ private fun AiBubbleContent(
                                         Text(
                                             text       = seg.text,
                                             style      = MaterialTheme.typography.bodyMedium,
-                                            color      = MaterialTheme.colorScheme.onSurface,
+                                            color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
                                             lineHeight = 22.sp
                                         )
                                     }
@@ -593,42 +663,52 @@ private fun AiBubbleContent(
     }
 }
 
-// ── Code block view ───────────────────────────────────────────────────────────
+// ── Code block ─────────────────────────────────────────────────────────────────
 
 @Composable
 private fun CodeBlockView(
-    code:       String,
-    language:   String,
-    isDarkTheme: Boolean,
-    onCopyCode: () -> Unit
+    code        : String,
+    language    : String,
+    isDarkTheme : Boolean,
+    onCopyCode  : () -> Unit
 ) {
-    val codeBg = if (isDarkTheme) Color(0xFF1A1D23) else Color(0xFFF3F4F6)
-    var copied by remember { mutableStateOf(false) }
-    val scope  = rememberCoroutineScope()
+    val codeBg   = if (isDarkTheme) Color(0xFF0D1117) else Color(0xFFF6F8FA)
+    val headerBg = if (isDarkTheme) Color(0xFF161B22) else Color(0xFFEAECF0)
+    var copied   by remember { mutableStateOf(false) }
+    val scope    = rememberCoroutineScope()
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, if (isDarkTheme) Color(0xFF30363D) else Color(0xFFD8DEE4), RoundedCornerShape(12.dp))
             .background(codeBg)
     ) {
-        // Header bar
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(if (isDarkTheme) Color(0xFF252830) else Color(0xFFE5E7EB))
-                .padding(horizontal = 12.dp, vertical = 6.dp),
+                .background(headerBg)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                language.ifBlank { "code" },
-                style     = MaterialTheme.typography.labelSmall,
-                color     = if (isDarkTheme) Color(0xFF9CA3AF) else Color(0xFF6B7280),
-                fontWeight = FontWeight.Medium
-            )
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Box(modifier = Modifier.size(7.dp).background(Color(0xFFFF5F56), CircleShape))
+                Box(modifier = Modifier.size(7.dp).background(Color(0xFFFFBD2E), CircleShape))
+                Box(modifier = Modifier.size(7.dp).background(Color(0xFF27C93F), CircleShape))
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    language.ifBlank { "code" },
+                    style      = MaterialTheme.typography.labelSmall,
+                    color      = if (isDarkTheme) Color(0xFF8B949E) else Color(0xFF57606A),
+                    fontWeight = FontWeight.Medium
+                )
+            }
             TextButton(
-                onClick      = {
+                onClick        = {
                     onCopyCode()
                     copied = true
                     scope.launch { delay(2000); copied = false }
@@ -638,75 +718,72 @@ private fun CodeBlockView(
                 Icon(
                     if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                     null,
-                    tint     = if (copied) Color(0xFF22C55E) else Blue500,
-                    modifier = Modifier.size(14.dp)
+                    tint     = if (copied) SuccessGreen else Blue500,
+                    modifier = Modifier.size(13.dp)
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
-                    if (copied) "Copied!" else "Copy code",
+                    if (copied) "Copied!" else "Copy",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (copied) Color(0xFF22C55E) else Blue500
+                    color = if (copied) SuccessGreen else Blue500
                 )
             }
         }
-        // Code body
         SelectionContainer {
             Text(
                 text      = code,
                 modifier  = Modifier
                     .fillMaxWidth()
-                    .padding(12.dp)
+                    .padding(14.dp)
                     .horizontalScroll(rememberScrollState()),
                 style     = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color     = if (isDarkTheme) Color(0xFFE2E8F0) else Color(0xFF1F2937),
+                color     = if (isDarkTheme) Color(0xFFE6EDF3) else Color(0xFF1F2328),
                 lineHeight = 20.sp
             )
         }
     }
 }
 
-// ── Inline action icon button ─────────────────────────────────────────────────
+// ── Inline action icon ─────────────────────────────────────────────────────────
 
 @Composable
 private fun BubbleActionIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
-    IconButton(
-        onClick  = onClick,
-        modifier = Modifier.size(30.dp)
-    ) {
+    IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) {
         Icon(
             icon, label,
-            tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
-            modifier = Modifier.size(15.dp)
+            tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier.size(14.dp)
         )
     }
 }
 
-// ── Long-press bottom sheet ───────────────────────────────────────────────────
+// ── Long-press bottom sheet ────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MessageActionsSheet(
-    onDismiss:    () -> Unit,
-    onCopy:       () -> Unit,
-    onShare:      () -> Unit,
-    onSave:       () -> Unit,
-    onRegenerate: () -> Unit
+    onDismiss    : () -> Unit,
+    onCopy       : () -> Unit,
+    onShare      : () -> Unit,
+    onSave       : () -> Unit,
+    onRegenerate : () -> Unit
 ) {
-    val sheetState = rememberModalBottomSheetState()
-
     ModalBottomSheet(
-        onDismissRequest  = onDismiss,
-        sheetState        = sheetState,
-        containerColor    = MaterialTheme.colorScheme.surface,
-        dragHandle        = {
+        onDismissRequest = onDismiss,
+        sheetState       = rememberModalBottomSheetState(),
+        containerColor   = MaterialTheme.colorScheme.surface,
+        dragHandle = {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Box(modifier = Modifier
-                    .width(36.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(0.3f)))
+                Box(
+                    modifier = Modifier
+                        .width(32.dp)
+                        .height(3.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(0.2f))
+                )
             }
         }
     ) {
@@ -718,85 +795,97 @@ private fun MessageActionsSheet(
         ) {
             Text(
                 "Message Actions",
-                style    = MaterialTheme.typography.titleSmall,
-                color    = MaterialTheme.colorScheme.onSurface,
+                style      = MaterialTheme.typography.titleSmall,
+                color      = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                modifier   = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.5f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.4f))
             Spacer(Modifier.height(4.dp))
-
-            SheetAction(Icons.Default.ContentCopy, "Copy",                   "Copy full response",            onCopy)
-            SheetAction(Icons.Default.Share,       "Share",                  "Send via WhatsApp, Gmail, etc.", onShare)
-            SheetAction(Icons.Default.BookmarkAdd, "Save to Knowledge Vault","Store for offline access",       onSave)
-            SheetAction(Icons.Default.Refresh,     "Regenerate",             "Generate a new response",        onRegenerate)
-            SheetAction(Icons.Default.TextFields,  "Select Text",            "Long-press text to select",      onDismiss)
+            SheetAction(Icons.Default.ContentCopy, "Copy",                    "Copy full response",             onCopy)
+            SheetAction(Icons.Default.Share,       "Share",                   "Send via WhatsApp, Gmail, etc.", onShare)
+            SheetAction(Icons.Default.BookmarkAdd, "Save to Knowledge Vault", "Store for offline access",       onSave)
+            SheetAction(Icons.Default.Refresh,     "Regenerate",              "Generate a new response",        onRegenerate)
+            SheetAction(Icons.Default.TextFields,  "Select Text",             "Long-press text to select",      onDismiss)
         }
     }
 }
 
 @Composable
 private fun SheetAction(
-    icon:     ImageVector,
-    title:    String,
-    subtitle: String,
-    onClick:  () -> Unit
+    icon     : ImageVector,
+    title    : String,
+    subtitle : String,
+    onClick  : () -> Unit
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 13.dp),
         verticalAlignment     = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Box(
             modifier         = Modifier
-                .size(40.dp)
-                .background(Blue500.copy(0.10f), RoundedCornerShape(12.dp)),
+                .size(38.dp)
+                .background(Blue50, RoundedCornerShape(11.dp)),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = Blue500, modifier = Modifier.size(20.dp))
+            Icon(icon, null, tint = Blue500, modifier = Modifier.size(18.dp))
         }
         Column {
-            Text(title, style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface, fontWeight = FontWeight.Medium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
-// ── Typing dots ───────────────────────────────────────────────────────────────
+// ── Typing dots ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun TypingDots(isDarkTheme: Boolean) {
     val inf = rememberInfiniteTransition(label = "typing")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         repeat(3) { i ->
             val scale by inf.animateFloat(
-                initialValue = 0.6f, targetValue = 1f,
+                initialValue = 0.5f, targetValue = 1f,
                 animationSpec = infiniteRepeatable(
-                    tween(400, delayMillis = i * 130, easing = EaseInOut), RepeatMode.Reverse
+                    tween(380, delayMillis = i * 120, easing = EaseInOut),
+                    RepeatMode.Reverse
                 ), label = "dot$i"
             )
-            Box(modifier = Modifier.size((6 * scale).dp)
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(0.5f), CircleShape))
+            Box(
+                modifier = Modifier
+                    .size((5 * scale).dp)
+                    .background(
+                        if (isDarkTheme) TextSecondary.copy(0.5f) else TextSecondaryLight.copy(0.4f),
+                        CircleShape
+                    )
+            )
         }
     }
 }
 
-// ── Markdown code block parser ────────────────────────────────────────────────
+// ── Message segment parser ─────────────────────────────────────────────────────
 
 private sealed interface MessageSegment {
     data class PlainText(val text: String) : MessageSegment
     data class CodeBlock(val language: String, val code: String) : MessageSegment
 }
 
-/**
- * Splits message text into plain text and fenced code block segments.
- * Handles ``` with optional language tag. No external library needed.
- */
 private fun parseMessageSegments(text: String): List<MessageSegment> {
     val segments = mutableListOf<MessageSegment>()
     val regex    = Regex("```(\\w*)\\n?([\\s\\S]*?)```", RegexOption.MULTILINE)
@@ -806,15 +895,13 @@ private fun parseMessageSegments(text: String): List<MessageSegment> {
         if (match.range.first > cursor) {
             segments += MessageSegment.PlainText(text.substring(cursor, match.range.first))
         }
-        val lang = match.groupValues[1].trim()
-        val code = match.groupValues[2].trimEnd('\n')
-        segments += MessageSegment.CodeBlock(lang, code)
+        segments += MessageSegment.CodeBlock(
+            match.groupValues[1].trim(),
+            match.groupValues[2].trimEnd('\n')
+        )
         cursor = match.range.last + 1
     }
 
-    if (cursor < text.length) {
-        segments += MessageSegment.PlainText(text.substring(cursor))
-    }
-
+    if (cursor < text.length) segments += MessageSegment.PlainText(text.substring(cursor))
     return if (segments.isEmpty()) listOf(MessageSegment.PlainText(text)) else segments
 }

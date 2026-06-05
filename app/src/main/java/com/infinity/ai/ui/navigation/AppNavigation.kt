@@ -153,12 +153,17 @@ fun AppNavigation(isDarkTheme: Boolean, onToggleTheme: () -> Unit) {
             }
             composable(Screen.Dashboard.route) {
                 DashboardScreen(
-                    isDarkTheme       = isDarkTheme,
-                    orbState          = orbState,
-                    bottomPadding     = innerPadding.calculateBottomPadding(),
-                    onNavigateToChat  = { navController.navigate(Screen.Chat.route) },
-                    onNavigateToVoice = { navController.navigate("voice") },
-                    onOrbTap          = { navController.navigate(Screen.Chat.route) }
+                    isDarkTheme            = isDarkTheme,
+                    orbState               = orbState,
+                    bottomPadding          = innerPadding.calculateBottomPadding(),
+                    onNavigateToChat       = { navController.navigate(Screen.Chat.route) },
+                    onNavigateToVoice      = { navController.navigate("voice") },
+                    onOrbTap               = { navController.navigate(Screen.Chat.route) },
+                    onNavigateToCircle     = { navController.navigate("circle_learn") },
+                    onNavigateToOcr        = { navController.navigate("ocr") },
+                    onNavigateToPdf        = { navController.navigate("pdf_summary") },
+                    onNavigateToQuiz       = { navController.navigate("quiz") },
+                    onNavigateToScreenshot = { navController.navigate("screenshot") }
                 )
             }
             composable(Screen.Chat.route) {
