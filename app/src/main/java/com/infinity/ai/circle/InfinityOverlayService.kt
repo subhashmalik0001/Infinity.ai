@@ -25,17 +25,18 @@ import kotlinx.coroutines.*
  * InfinityOverlayService
  *
  * Owns the entire Circle Learn flow via WindowManager overlays.
- * The host app is NEVER obscured by a full-screen Activity launch.
  *
- * Pipeline:
+ * KEY FIX: MediaProjection is created ONCE when the service starts and
+ * reused for every capture. Only VirtualDisplay is created/released per tap.
+ * The projection is only stopped in onDestroy() or ACTION_STOP.
+ *
+ * Pipeline per tap:
  *   Bubble tap
- *   → captureScreen()
- *   → attachSelectionOverlay()      RegionSelectionView on WindowManager
- *   → vm.processRegion()            OCR via existing pipeline
- *   → attachBottomSheetOverlay()    CircleLearnBottomSheetHost on WindowManager
- *   → onDismiss → removeAllOverlays(), restore bubble
- *
- * CircleLearnActivity is the fallback when SYSTEM_ALERT_WINDOW is not granted.
+ *   → captureScreen()          creates VirtualDisplay from existing mp, grabs frame, releases VD
+ *   → attachSelectionOverlay() RegionSelectionView on WindowManager
+ *   → vm.processRegion()       OCR
+ *   → attachBottomSheetOverlay() CircleLearnBottomSheetHost on WindowManager
+ *   → onDismiss → removeAllOverlays(), restore bubble  ← bubble stays, ready for next tap
  */
 class InfinityOverlayService : Service() {
 
@@ -48,10 +49,6 @@ class InfinityOverlayService : Service() {
         private const val CHANNEL_ID = "infinity_overlay"
         private const val TAG        = "InfinityOverlayService"
 
-        /**
-         * Fallback: populated before launching CircleLearnActivity when overlay
-         * permission is unavailable. Not used in the normal overlay flow.
-         */
         @Volatile var pendingScreenshot: Bitmap? = null
     }
 
@@ -68,9 +65,10 @@ class InfinityOverlayService : Service() {
     private var selectionOverlay: RegionSelectionView? = null
     private var sheetHost:        OverlayComposeHost? = null
 
-    // ── MediaProjection consent token (stored; no active projection at rest) ───
-    // Stored once at service start. A fresh MediaProjection is created per-tap,
-    // used for exactly one frame capture, then immediately stopped and nulled.
+    // ── MediaProjection — created ONCE, reused forever until service stops ─────
+    // This is the fix: we never call mp.stop() after a capture.
+    // Only VirtualDisplay is created/released per capture.
+    private var mediaProjection: MediaProjection? = null
     private var projectionResultCode: Int     = Activity.RESULT_CANCELED
     private var projectionResultData: Intent? = null
 
@@ -109,7 +107,11 @@ class InfinityOverlayService : Service() {
                 projectionResultCode = intent.getIntExtra(EXTRA_RESULT_CODE, Activity.RESULT_CANCELED)
                 @Suppress("DEPRECATION")
                 projectionResultData = intent.getParcelableExtra<Intent>(EXTRA_RESULT_DATA)
+
+                // Create MediaProjection ONCE here — reuse for all captures
+                initMediaProjection()
                 showBubble()
+                Log.i(TAG, "Circle Learn ready")
             }
             ACTION_STOP -> stopSelf()
         }
@@ -117,15 +119,52 @@ class InfinityOverlayService : Service() {
     }
 
     override fun onDestroy() {
+        Log.i(TAG, "Service destroyed — releasing MediaProjection")
         scope.cancel()
         hideBubble()
         removeAllOverlays()
         currentScreenshot?.recycle(); currentScreenshot = null
+        releaseMediaProjection()
         vmStore.clear()
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    // ── MediaProjection init (once per service session) ────────────────────────
+
+    private fun initMediaProjection() {
+        val data = projectionResultData
+        if (projectionResultCode != Activity.RESULT_OK || data == null) {
+            Log.e(TAG, "No projection consent — cannot init MediaProjection")
+            return
+        }
+        if (mediaProjection != null) {
+            Log.i(TAG, "MediaProjection reused")
+            return
+        }
+        val mgr = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        mediaProjection = mgr.getMediaProjection(projectionResultCode, data)
+        if (mediaProjection != null) {
+            Log.i(TAG, "MediaProjection created successfully")
+            // Register callback so we know if system kills the projection
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                mediaProjection!!.registerCallback(object : MediaProjection.Callback() {
+                    override fun onStop() {
+                        Log.w(TAG, "MediaProjection stopped by system")
+                        mediaProjection = null
+                    }
+                }, Handler(Looper.getMainLooper()))
+            }
+        } else {
+            Log.e(TAG, "getMediaProjection returned null")
+        }
+    }
+
+    private fun releaseMediaProjection() {
+        mediaProjection?.stop()
+        mediaProjection = null
+    }
 
     // ── Bubble ─────────────────────────────────────────────────────────────────
 
@@ -133,13 +172,30 @@ class InfinityOverlayService : Service() {
         if (!OverlayPermissionHelper.hasOverlayPermission(this)) {
             Log.w(TAG, "No overlay permission — bubble not shown"); return
         }
+        if (bubble?.isShowing() == true) {
+            Log.i(TAG, "Bubble reused")
+            return
+        }
         bubble = FloatingBubbleView(this) { onBubbleTapped() }
         bubble?.show()
+        Log.i(TAG, "Bubble attached")
     }
 
     private fun hideBubble() { bubble?.hide(); bubble = null }
 
-    // ── Step 1: Bubble tapped ─────────────────────────────────────────────────
+    /** Ensure bubble is present — re-attaches if it was removed unexpectedly. */
+    private fun ensureBubble() {
+        if (bubble?.isShowing() == true) {
+            Log.i(TAG, "Bubble reused")
+            return
+        }
+        Log.w(TAG, "Bubble missing — re-attaching")
+        bubble = FloatingBubbleView(this) { onBubbleTapped() }
+        bubble?.show()
+        Log.i(TAG, "Bubble attached")
+    }
+
+    // ── Step 1: Bubble tapped ──────────────────────────────────────────────────
 
     private fun onBubbleTapped() {
         if (!OverlayPermissionHelper.hasOverlayPermission(this)) {
@@ -158,7 +214,7 @@ class InfinityOverlayService : Service() {
         }
     }
 
-    // ── Step 2: Selection overlay ─────────────────────────────────────────────
+    // ── Step 2: Selection overlay ──────────────────────────────────────────────
 
     private fun attachSelectionOverlay(screenshot: Bitmap) {
         val params = fullScreenParams(
@@ -172,7 +228,8 @@ class InfinityOverlayService : Service() {
             onCancel = {
                 scope.launch(Dispatchers.Main) {
                     removeSelectionOverlay()
-                    bubble?.show()
+                    // Bubble stays alive — user cancelled, ready for next tap
+                    ensureBubble()
                 }
             }
             onRegionSelected = { region ->
@@ -212,13 +269,17 @@ class InfinityOverlayService : Service() {
                             removeBottomSheetOverlay()
                             vm.reset()
                             currentScreenshot?.recycle(); currentScreenshot = null
-                            bubble?.show()
+                            Log.i(TAG, "Activity closed — returning control to bubble")
+                            // Bubble re-attach: service stays alive, bubble ready for next tap
+                            ensureBubble()
                         }
                     },
                     onOpenInApp = { route ->
                         scope.launch(Dispatchers.Main) {
                             removeAllOverlays()
                             vm.reset()
+                            // DO NOT stop service or destroy bubble here
+                            // Bubble stays alive in background while user views app
                             launchMainActivity(route)
                         }
                     }
@@ -267,46 +328,55 @@ class InfinityOverlayService : Service() {
         startActivity(intent)
     }
 
-    // ── MediaProjection ────────────────────────────────────────────────────────
-    // Created per-tap, used for one frame, then fully released.
-    // Nothing GPU-related is held between taps.
+    // ── Screen capture ─────────────────────────────────────────────────────────
+    // Uses the EXISTING mediaProjection — never re-creates it.
+    // Only VirtualDisplay is created and released per capture.
 
     private fun captureScreen(onCaptured: (Bitmap) -> Unit) {
-        val data = projectionResultData
-        if (projectionResultCode != Activity.RESULT_OK || data == null) {
-            Log.e(TAG, "No projection consent available")
-            vm.setError("Screen capture not available. Please restart Circle Learn.")
-            attachBottomSheetOverlay()
+        val mp = mediaProjection
+        if (mp == null) {
+            Log.e(TAG, "MediaProjection not available — attempting re-init")
+            // Try to recover by re-initialising (handles system-killed projection edge case)
+            initMediaProjection()
+            val mpRetry = mediaProjection
+            if (mpRetry == null) {
+                Log.e(TAG, "Re-init failed — cannot capture")
+                vm.setError("Screen capture not available. Please restart Circle Learn.")
+                attachBottomSheetOverlay()
+                ensureBubble()
+                return
+            }
+            doCaptureWithProjection(mpRetry, onCaptured)
             return
         }
+        Log.i(TAG, "MediaProjection reused")
+        doCaptureWithProjection(mp, onCaptured)
+    }
 
-        val mgr    = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        val mp     = mgr.getMediaProjection(projectionResultCode, data) ?: run {
-            Log.e(TAG, "getMediaProjection returned null")
-            vm.setError("Screen capture failed. Please restart Circle Learn.")
-            attachBottomSheetOverlay()
-            return
-        }
+    private fun doCaptureWithProjection(mp: MediaProjection, onCaptured: (Bitmap) -> Unit) {
         val reader = ImageReader.newInstance(screenWidth, screenHeight, PixelFormat.RGBA_8888, 2)
-        val vd     = mp.createVirtualDisplay(
+
+        val vd: VirtualDisplay? = mp.createVirtualDisplay(
             "CircleLearn", screenWidth, screenHeight, screenDpi,
             DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             reader.surface, null, null
-        ) ?: run {
-            reader.close(); mp.stop()
+        )
+
+        if (vd == null) {
+            reader.close()
             Log.e(TAG, "createVirtualDisplay returned null")
-            vm.setError("Screen capture failed. Please restart Circle Learn.")
+            vm.setError("Screen capture failed. Please try again.")
             attachBottomSheetOverlay()
+            ensureBubble()
             return
         }
 
         scope.launch(Dispatchers.IO) {
             delay(300) // allow VirtualDisplay to render one frame
             val image = reader.acquireLatestImage()
-            // ── Release all projection resources immediately after frame grab ──
             try {
                 if (image == null) {
-                    Log.e(TAG, "No image acquired")
+                    Log.w(TAG, "No image acquired — returning blank bitmap")
                     withContext(Dispatchers.Main) {
                         onCaptured(Bitmap.createBitmap(screenWidth, screenHeight, Bitmap.Config.ARGB_8888))
                     }
@@ -327,19 +397,19 @@ class InfinityOverlayService : Service() {
                 val cropped = Bitmap.createBitmap(bmp, 0, 0, screenWidth, screenHeight)
                 if (cropped != bmp) bmp.recycle()
 
-                Log.i(TAG, "Captured ${cropped.width}x${cropped.height} — releasing MediaProjection")
+                Log.i(TAG, "Capture complete — ${cropped.width}x${cropped.height}")
                 withContext(Dispatchers.Main) { onCaptured(cropped) }
             } finally {
-                // Always release in finally — even if bitmap copy throws
+                // Only release VirtualDisplay — NEVER call mp.stop() here
                 image?.close()
                 vd.release()
                 reader.close()
-                mp.stop()
+                Log.i(TAG, "VirtualDisplay released — MediaProjection still alive")
             }
         }
     }
 
-    // ── WindowManager helpers ─────────────────────────────────────────────────
+    // ── WindowManager helpers ──────────────────────────────────────────────────
 
     private fun fullScreenParams(flags: Int) = WindowManager.LayoutParams(
         WindowManager.LayoutParams.MATCH_PARENT,
