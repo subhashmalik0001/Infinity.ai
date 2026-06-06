@@ -64,6 +64,11 @@ import com.infinity.ai.viewmodel.ChatViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.PickVisualMediaRequest
+import android.net.Uri
+import android.provider.OpenableColumns
 
 @Composable
 fun ChatScreen(
@@ -519,6 +524,24 @@ private fun ChatInputBar(
     onDocSelect: (String?) -> Unit
 ) {
     val canSend = input.isNotBlank() && !isGenerating
+    val context = LocalContext.current
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+        onResult = { uri ->
+            if (uri != null) {
+                onImageSelect(getFileName(context, uri) ?: "Selected Image")
+            }
+        }
+    )
+
+    val docPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                onDocSelect(getFileName(context, uri) ?: "Selected Document")
+            }
+        }
+    )
 
     // Main input card
     Box(
@@ -627,7 +650,9 @@ private fun ChatInputBar(
                             leadingIcon = { Icon(Icons.Default.Image, "Image", tint = BluePrimary) },
                             onClick = {
                                 showMenu = false
-                                onImageSelect("photo_attachment.jpg")
+                                imagePickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
                             }
                         )
                         DropdownMenuItem(
@@ -635,7 +660,7 @@ private fun ChatInputBar(
                             leadingIcon = { Icon(Icons.Default.Description, "Document", tint = BluePrimary) },
                             onClick = {
                                 showMenu = false
-                                onDocSelect("document_attachment.pdf")
+                                docPickerLauncher.launch(arrayOf("*/*"))
                             }
                         )
                         DropdownMenuItem(
@@ -1073,6 +1098,25 @@ private fun CenteredEmptyState(
     selectedDocName: String?,
     onDocSelect: (String?) -> Unit
 ) {
+    val context = LocalContext.current
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia(),
+        onResult = { uri ->
+            if (uri != null) {
+                onImageSelect(getFileName(context, uri) ?: "Selected Image")
+            }
+        }
+    )
+
+    val docPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri != null) {
+                onDocSelect(getFileName(context, uri) ?: "Selected Document")
+            }
+        }
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -1278,7 +1322,9 @@ private fun CenteredEmptyState(
                                 leadingIcon = { Icon(Icons.Default.Image, "Image", tint = BluePrimary) },
                                 onClick = {
                                     showMenu = false
-                                    onImageSelect("photo_attachment.jpg")
+                                    imagePickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    )
                                 }
                             )
                             DropdownMenuItem(
@@ -1286,7 +1332,7 @@ private fun CenteredEmptyState(
                                 leadingIcon = { Icon(Icons.Default.Description, "Document", tint = BluePrimary) },
                                 onClick = {
                                     showMenu = false
-                                    onDocSelect("document_attachment.pdf")
+                                    docPickerLauncher.launch(arrayOf("*/*"))
                                 }
                             )
                             DropdownMenuItem(
@@ -1591,4 +1637,27 @@ private fun AttachmentPill(
             )
         }
     }
+}
+
+private fun getFileName(context: Context, uri: Uri): String? {
+    var name: String? = null
+    if (uri.scheme == "content") {
+        val cursor = context.contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val index = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (index != -1) {
+                    name = it.getString(index)
+                }
+            }
+        }
+    }
+    if (name == null) {
+        name = uri.path
+        val cut = name?.lastIndexOf('/')
+        if (cut != null && cut != -1) {
+            name = name.substring(cut + 1)
+        }
+    }
+    return name
 }
