@@ -14,7 +14,7 @@ class ThemeViewModel(app: Application) : AndroidViewModel(app) {
     val isDarkTheme = pref.isDarkTheme.stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
-        true
+        false
     )
 
     fun toggleTheme() {

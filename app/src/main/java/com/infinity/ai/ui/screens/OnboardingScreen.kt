@@ -2,6 +2,7 @@ package com.infinity.ai.ui.screens
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,10 +32,12 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.infinity.ai.R
 import com.infinity.ai.ui.theme.BluePrimary
 import com.infinity.ai.ui.theme.BlueGradientEnd
 import kotlinx.coroutines.launch
@@ -58,19 +61,19 @@ fun OnboardingScreen(
                 title = "Your AI Assistant, Anywhere",
                 description = "Access powerful AI tools, voice assistance, image understanding, and intelligent conversations directly from your device.",
                 highlights = listOf("Offline-first AI", "Fast responses", "Privacy focused"),
-                illustration = { isDark -> DeviceChatIllustration(isDark) }
+                illustration = { isDark -> OnboardingImageIllustration(R.drawable.onboarding_assistant, "AI Assistant", isDark) }
             ),
             OnboardingPageData(
                 title = "Understand Anything Instantly",
                 description = "Upload images, files, PDFs, screenshots, or notes and get explanations, summaries, answers, and insights within seconds.",
                 highlights = listOf("File Analyzer", "OCR Scanner", "Image Understanding", "Smart Summaries"),
-                illustration = { isDark -> DocumentAnalyzeIllustration(isDark) }
+                illustration = { isDark -> OnboardingImageIllustration(R.drawable.onboarding_file_analyzer, "File Analyzer", isDark) }
             ),
             OnboardingPageData(
                 title = "Circle. Learn. Explore.",
                 description = "Circle anything on your screen to instantly explain, summarize, translate, generate notes, quizzes, flashcards, and more.",
                 highlights = listOf("Circle Learn", "Explain Concepts", "Generate Notes", "Flashcards & Quizzes"),
-                illustration = { isDark -> CircleLearnOnboardingIllustration(isDark) }
+                illustration = { isDark -> OnboardingImageIllustration(R.drawable.onboarding_circle_learn, "Circle Learn", isDark) }
             )
         )
     }
@@ -302,6 +305,64 @@ fun OnboardingScreen(
                 }
             }
         }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ── Image Onboarding Illustration helper
+// ──────────────────────────────────────────────────────────────────────────────
+@Composable
+fun OnboardingImageIllustration(
+    imageResId: Int,
+    contentDescription: String,
+    isDark: Boolean
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "illustrationPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.97f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    val borderColor = if (isDark) Color(0xFF2E2E3A) else Color(0xFFE2E8F0)
+
+    Box(
+        modifier = Modifier
+            .size(260.dp)
+            .scale(pulseScale),
+        contentAlignment = Alignment.Center
+    ) {
+        // Soft radial background glow
+        Box(
+            modifier = Modifier
+                .size(220.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.radialGradient(
+                        colors = if (isDark) {
+                            listOf(Color(0x1ADB9F0B), Color.Transparent)
+                        } else {
+                            listOf(Color(0x0FDB9F0B), Color.Transparent)
+                        }
+                    )
+                )
+        )
+
+        // The image with rounded corners and border
+        Image(
+            painter = painterResource(id = imageResId),
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .size(width = 240.dp, height = 240.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .border(1.dp, borderColor, RoundedCornerShape(24.dp))
+                .background(if (isDark) Color(0xFF17171C) else Color.White),
+            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+        )
     }
 }
 
