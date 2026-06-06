@@ -84,6 +84,10 @@ fun ChatScreen(
     val context         = LocalContext.current
     val scope           = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var isThinkingActive by remember { mutableStateOf(false) }
+    var isDeepResearchActive by remember { mutableStateOf(false) }
+    var selectedImageName by remember { mutableStateOf<String?>(null) }
+    var selectedDocName by remember { mutableStateOf<String?>(null) }
 
     val isGenerating = aiState is AIInferenceState.Thinking ||
                        aiState is AIInferenceState.Responding
@@ -209,7 +213,16 @@ fun ChatScreen(
                     onInputChange = { chatViewModel.onInputChange(it) },
                     onSend = { chatViewModel.sendMessage(); keyboardController?.hide() },
                     onVoice = onNavigateToVoice,
-                    onSuggestionClick = { chatViewModel.startFromSuggestion(it) }
+                    onSuggestionClick = { chatViewModel.startFromSuggestion(it) },
+                    isDarkTheme = false,
+                    isThinkingActive = isThinkingActive,
+                    onThinkingToggle = { isThinkingActive = it },
+                    isDeepResearchActive = isDeepResearchActive,
+                    onDeepResearchToggle = { isDeepResearchActive = it },
+                    selectedImageName = selectedImageName,
+                    onImageSelect = { selectedImageName = it },
+                    selectedDocName = selectedDocName,
+                    onDocSelect = { selectedDocName = it }
                 )
             } else {
                 val promptMap = remember(messages) {
@@ -274,7 +287,15 @@ fun ChatScreen(
                     onInputChange = { chatViewModel.onInputChange(it) },
                     onSend        = { chatViewModel.sendMessage(); keyboardController?.hide() },
                     onStop        = { chatViewModel.stopGeneration() },
-                    onVoice       = onNavigateToVoice
+                    onVoice       = onNavigateToVoice,
+                    isThinkingActive = isThinkingActive,
+                    onThinkingToggle = { isThinkingActive = it },
+                    isDeepResearchActive = isDeepResearchActive,
+                    onDeepResearchToggle = { isDeepResearchActive = it },
+                    selectedImageName = selectedImageName,
+                    onImageSelect = { selectedImageName = it },
+                    selectedDocName = selectedDocName,
+                    onDocSelect = { selectedDocName = it }
                 )
             }
         }
@@ -487,7 +508,15 @@ private fun ChatInputBar(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
-    onVoice: () -> Unit
+    onVoice: () -> Unit,
+    isThinkingActive: Boolean,
+    onThinkingToggle: (Boolean) -> Unit,
+    isDeepResearchActive: Boolean,
+    onDeepResearchToggle: (Boolean) -> Unit,
+    selectedImageName: String?,
+    onImageSelect: (String?) -> Unit,
+    selectedDocName: String?,
+    onDocSelect: (String?) -> Unit
 ) {
     val canSend = input.isNotBlank() && !isGenerating
 
@@ -505,6 +534,34 @@ private fun ChatInputBar(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp, vertical = 14.dp)
         ) {
+            // Active attachments preview list
+            if (selectedImageName != null || selectedDocName != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    selectedImageName?.let { img ->
+                        AttachmentPill(
+                            name = img,
+                            icon = Icons.Default.Image,
+                            onClose = { onImageSelect(null) },
+                            isDarkTheme = isDarkTheme
+                        )
+                    }
+                    selectedDocName?.let { doc ->
+                        AttachmentPill(
+                            name = doc,
+                            icon = Icons.Default.Description,
+                            onClose = { onDocSelect(null) },
+                            isDarkTheme = isDarkTheme
+                        )
+                    }
+                }
+            }
+
             // Text input area
             BasicTextField(
                 value = input,
@@ -544,12 +601,13 @@ private fun ChatInputBar(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 // Plus button
+                var showMenu by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
                         .size(34.dp)
                         .clip(CircleShape)
                         .background(Color(0xFFF1F5F9))
-                        .clickable { },
+                        .clickable { showMenu = true },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -558,11 +616,86 @@ private fun ChatInputBar(
                         tint = TextSecondary,
                         modifier = Modifier.size(18.dp)
                     )
+
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(if (isDarkTheme) Color(0xFF1E1E24) else Color.White)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Image", color = if (isDarkTheme) Color.White else Color(0xFF0F172A)) },
+                            leadingIcon = { Icon(Icons.Default.Image, "Image", tint = BluePrimary) },
+                            onClick = {
+                                showMenu = false
+                                onImageSelect("photo_attachment.jpg")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Document", color = if (isDarkTheme) Color.White else Color(0xFF0F172A)) },
+                            leadingIcon = { Icon(Icons.Default.Description, "Document", tint = BluePrimary) },
+                            onClick = {
+                                showMenu = false
+                                onDocSelect("document_attachment.pdf")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Thinking Mode", color = if (isDarkTheme) Color.White else Color(0xFF0F172A))
+                                    Spacer(Modifier.width(16.dp))
+                                    Switch(
+                                        checked = isThinkingActive,
+                                        onCheckedChange = { onThinkingToggle(it) },
+                                        colors = SwitchDefaults.colors(checkedThumbColor = BluePrimary)
+                                    )
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Lightbulb, "Thinking", tint = BluePrimary) },
+                            onClick = {
+                                showMenu = false
+                                onThinkingToggle(!isThinkingActive)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Deep Research", color = if (isDarkTheme) Color.White else Color(0xFF0F172A))
+                                    Spacer(Modifier.width(16.dp))
+                                    Switch(
+                                        checked = isDeepResearchActive,
+                                        onCheckedChange = { onDeepResearchToggle(it) },
+                                        colors = SwitchDefaults.colors(checkedThumbColor = BluePrimary)
+                                    )
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Search, "Research", tint = BluePrimary) },
+                            onClick = {
+                                showMenu = false
+                                onDeepResearchToggle(!isDeepResearchActive)
+                            }
+                        )
+                    }
                 }
 
                 // Model label in center
+                val modelText = remember(isThinkingActive, isDeepResearchActive) {
+                    when {
+                        isThinkingActive && isDeepResearchActive -> "AI Chat · Deep + Thinking"
+                        isThinkingActive -> "AI Chat · Thinking"
+                        isDeepResearchActive -> "AI Chat · Deep Research"
+                        else -> "AI Chat"
+                    }
+                }
                 Text(
-                    "AI Chat",
+                    modelText,
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                     color = TextSecondary.copy(alpha = 0.7f)
                 )
@@ -929,7 +1062,16 @@ private fun CenteredEmptyState(
     onInputChange: (String) -> Unit,
     onSend: () -> Unit,
     onVoice: () -> Unit,
-    onSuggestionClick: (String) -> Unit
+    onSuggestionClick: (String) -> Unit,
+    isDarkTheme: Boolean,
+    isThinkingActive: Boolean,
+    onThinkingToggle: (Boolean) -> Unit,
+    isDeepResearchActive: Boolean,
+    onDeepResearchToggle: (Boolean) -> Unit,
+    selectedImageName: String?,
+    onImageSelect: (String?) -> Unit,
+    selectedDocName: String?,
+    onDocSelect: (String?) -> Unit
 ) {
     Column(
         modifier = modifier
@@ -1051,6 +1193,34 @@ private fun CenteredEmptyState(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
+                // Active attachments preview list
+                if (selectedImageName != null || selectedDocName != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        selectedImageName?.let { img ->
+                            AttachmentPill(
+                                name = img,
+                                icon = Icons.Default.Image,
+                                onClose = { onImageSelect(null) },
+                                isDarkTheme = isDarkTheme
+                            )
+                        }
+                        selectedDocName?.let { doc ->
+                            AttachmentPill(
+                                name = doc,
+                                icon = Icons.Default.Description,
+                                onClose = { onDocSelect(null) },
+                                isDarkTheme = isDarkTheme
+                            )
+                        }
+                    }
+                }
+
                 BasicTextField(
                     value = input,
                     onValueChange = onInputChange,
@@ -1087,20 +1257,96 @@ private fun CenteredEmptyState(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     // Plus icon
+                    var showMenu by remember { mutableStateOf(false) }
                     Box(
                         modifier = Modifier
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(0xFFF1F5F9))
-                            .clickable { },
+                            .clickable { showMenu = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Add, "Add", tint = Color(0xFF475569), modifier = Modifier.size(18.dp))
+
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false },
+                            modifier = Modifier.background(if (isDarkTheme) Color(0xFF1E1E24) else Color.White)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Image", color = if (isDarkTheme) Color.White else Color(0xFF0F172A)) },
+                                leadingIcon = { Icon(Icons.Default.Image, "Image", tint = BluePrimary) },
+                                onClick = {
+                                    showMenu = false
+                                    onImageSelect("photo_attachment.jpg")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Document", color = if (isDarkTheme) Color.White else Color(0xFF0F172A)) },
+                                leadingIcon = { Icon(Icons.Default.Description, "Document", tint = BluePrimary) },
+                                onClick = {
+                                    showMenu = false
+                                    onDocSelect("document_attachment.pdf")
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Thinking Mode", color = if (isDarkTheme) Color.White else Color(0xFF0F172A))
+                                        Spacer(Modifier.width(16.dp))
+                                        Switch(
+                                            checked = isThinkingActive,
+                                            onCheckedChange = { onThinkingToggle(it) },
+                                            colors = SwitchDefaults.colors(checkedThumbColor = BluePrimary)
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Default.Lightbulb, "Thinking", tint = BluePrimary) },
+                                onClick = {
+                                    showMenu = false
+                                    onThinkingToggle(!isThinkingActive)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("Deep Research", color = if (isDarkTheme) Color.White else Color(0xFF0F172A))
+                                        Spacer(Modifier.width(16.dp))
+                                        Switch(
+                                            checked = isDeepResearchActive,
+                                            onCheckedChange = { onDeepResearchToggle(it) },
+                                            colors = SwitchDefaults.colors(checkedThumbColor = BluePrimary)
+                                        )
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Default.Search, "Research", tint = BluePrimary) },
+                                onClick = {
+                                    showMenu = false
+                                    onDeepResearchToggle(!isDeepResearchActive)
+                                }
+                            )
+                        }
                     }
 
                     // Center label
+                    val modelText = remember(isThinkingActive, isDeepResearchActive) {
+                        when {
+                            isThinkingActive && isDeepResearchActive -> "AI Chat · Deep + Thinking"
+                            isThinkingActive -> "AI Chat · Thinking"
+                            isDeepResearchActive -> "AI Chat · Deep Research"
+                            else -> "AI Chat"
+                        }
+                    }
                     Text(
-                        "AI Chat",
+                        modelText,
                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
                         color = Color(0xFF94A3B8)
                     )
@@ -1302,5 +1548,47 @@ private fun RecentSearchItem(
             tint = if (isStarred) Color(0xFFFFB020) else Color(0xFFC4CDD5),
             modifier = Modifier.size(20.dp)
         )
+    }
+}
+
+@Composable
+private fun AttachmentPill(
+    name: String,
+    icon: ImageVector,
+    onClose: () -> Unit,
+    isDarkTheme: Boolean
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (isDarkTheme) Color(0xFF2E2E3A) else Color(0xFFF1F5F9))
+            .border(0.8.dp, if (isDarkTheme) Color(0xFF47475A) else Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+            .padding(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = BluePrimary,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isDarkTheme) Color.White else Color(0xFF0F172A),
+                maxLines = 1
+            )
+            Icon(
+                Icons.Default.Close,
+                contentDescription = "Remove",
+                tint = if (isDarkTheme) Color.White.copy(alpha = 0.5f) else Color(0xFF64748B),
+                modifier = Modifier
+                    .size(14.dp)
+                    .clickable { onClose() }
+            )
+        }
     }
 }
