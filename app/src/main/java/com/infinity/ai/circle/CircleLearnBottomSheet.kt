@@ -3,12 +3,12 @@ package com.infinity.ai.circle
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -16,6 +16,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.ui.res.painterResource
+import com.infinity.ai.R
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -24,14 +29,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Blue500    = Color(0xFF3B82F6)
-private val Purple500  = Color(0xFF8B5CF6)
+private val Blue500    = Color(0xFFDD9F0B)
+private val Purple500  = Color(0xFFFBBF24)
 private val Green500   = Color(0xFF10B981)
 private val Amber500   = Color(0xFFF59E0B)
 private val Red500     = Color(0xFFEF4444)
-private val DarkBg     = Color(0xFF0F1115)
-private val DarkSurface = Color(0xFF161A22)
-private val DarkGlass  = Color(0x1AFFFFFF)
 
 /**
  * CircleLearnBottomSheetHost
@@ -52,12 +54,16 @@ fun CircleLearnBottomSheetHost(
     val detection   by vm.detection.collectAsState()
     val savedBanner by vm.savedToVault.collectAsState()
 
+    val isDarkTheme = isSystemInDarkTheme()
+    val backgroundColor = if (isDarkTheme) Color(0xD9121214) else Color(0xD9FFFFFF)
+    val borderStrokeColor = if (isDarkTheme) Color.White.copy(alpha = 0.08f) else Color(0xFFE2E8F0)
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.55f))
             .clickable(indication = null, interactionSource = remember {
-                androidx.compose.foundation.interaction.MutableInteractionSource()
+                MutableInteractionSource()
             }) { /* absorb touches outside sheet */ }
     ) {
         // Bottom sheet panel
@@ -65,8 +71,18 @@ fun CircleLearnBottomSheetHost(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.BottomCenter)
-                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(DarkBg)
+                .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+                .background(backgroundColor)
+                .border(
+                    width = 1.dp,
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            borderStrokeColor,
+                            Color.Transparent
+                        )
+                    ),
+                    shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)
+                )
                 .navigationBarsPadding()
         ) {
             // Drag handle
@@ -77,19 +93,20 @@ fun CircleLearnBottomSheetHost(
                 Box(modifier = Modifier
                     .width(40.dp).height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color.White.copy(0.2f)))
+                    .background(if (isDarkTheme) Color.White.copy(0.2f) else Color.Black.copy(0.1f)))
             }
 
             when (val s = uiState) {
                 is CircleUiState.Idle, is CircleUiState.Processing ->
-                    ProcessingPanel()
+                    ProcessingPanel(isDarkTheme)
 
                 is CircleUiState.OcrDone ->
                     ActionPanel(
                         ocrText   = ocrText,
                         detection = detection,
                         onAction  = { vm.runAction(it) },
-                        onDismiss = onDismiss
+                        onDismiss = onDismiss,
+                        isDarkTheme = isDarkTheme
                     )
 
                 is CircleUiState.Generating ->
@@ -99,7 +116,8 @@ fun CircleLearnBottomSheetHost(
                         isStreaming = true,
                         onStop      = { vm.stop() },
                         onSave      = { vm.saveToVault() },
-                        onDismiss   = onDismiss
+                        onDismiss   = onDismiss,
+                        isDarkTheme = isDarkTheme
                     )
 
                 is CircleUiState.Done ->
@@ -111,11 +129,12 @@ fun CircleLearnBottomSheetHost(
                         onSave      = { vm.saveToVault() },
                         onDismiss   = onDismiss,
                         onOpenInApp = onOpenInApp,
-                        onRunAnother = { vm.reset() }
+                        onRunAnother = { vm.reset() },
+                        isDarkTheme = isDarkTheme
                     )
 
                 is CircleUiState.Error ->
-                    ErrorPanel(message = s.message, onDismiss = onDismiss, onRetry = { vm.reset() })
+                    ErrorPanel(message = s.message, onDismiss = onDismiss, onRetry = { vm.reset() }, isDarkTheme = isDarkTheme)
             }
         }
 
@@ -144,16 +163,15 @@ fun CircleLearnBottomSheetHost(
 // ── Processing panel ──────────────────────────────────────────────────────────
 
 @Composable
-private fun ProcessingPanel() {
+private fun ProcessingPanel(isDarkTheme: Boolean) {
+    val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
+    val textSecondaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        val inf = rememberInfiniteTransition(label = "spin")
-        val angle by inf.animateFloat(0f, 360f,
-            infiniteRepeatable(tween(1200, easing = LinearEasing)), label = "a")
-
         Box(
             modifier = Modifier.size(64.dp)
                 .background(
@@ -162,12 +180,16 @@ private fun ProcessingPanel() {
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Text("∞", fontSize = 28.sp, color = Color.White, fontWeight = FontWeight.Light)
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "Infinity Logo",
+                modifier = Modifier.size(width = 56.dp, height = 31.dp)
+            )
         }
-        Text("Reading your selection…", style = MaterialTheme.typography.titleMedium,
-            color = Color.White, textAlign = TextAlign.Center)
+        Text("Reading your selection…", style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = textPrimaryColor, textAlign = TextAlign.Center)
         Text("OCR in progress", style = MaterialTheme.typography.bodySmall,
-            color = Color.White.copy(0.5f))
+            color = textSecondaryColor)
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -179,124 +201,562 @@ private fun ActionPanel(
     ocrText  : String,
     detection: ContentTypeDetector.DetectionResult?,
     onAction : (CircleAction) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isDarkTheme: Boolean
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        // Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+    val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
+    val textSecondaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+    val borderStrokeColor = if (isDarkTheme) Color.White.copy(alpha = 0.08f) else Color(0xFFE2E8F0)
+    val cardBackgroundColor = if (isDarkTheme) Color(0xFF17171C) else Color(0xFFFFFFFF)
+
+    val primaryActions = detection?.primaryActions
+        ?: listOf(
+            CircleAction.EXPLAIN,
+            CircleAction.SUMMARIZE,
+            CircleAction.NOTES,
+            CircleAction.TRANSLATE,
+            CircleAction.QUIZ,
+            CircleAction.FLASHCARDS
+        )
+
+    var selectedAction by remember { mutableStateOf(primaryActions.firstOrNull() ?: CircleAction.EXPLAIN) }
+    var isAutoSaveEnabled by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        // Scrollable content
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text("What would you like to do?",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White, fontWeight = FontWeight.SemiBold)
-                if (detection != null) {
-                    Text("Detected: ${detection.type.name.lowercase().replaceFirstChar { it.uppercase() }}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Blue500)
+            // 1. Top Header Row (matching mockup header "Create a room" layout)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Left circular button (Edit/Pen icon)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (isDarkTheme) Color.White.copy(0.08f) else Color(0xFFF1F5F9))
+                        .clickable { /* edit/reset action */ },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = "Edit selection",
+                        tint = textPrimaryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                // Center Title Column
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Circle Learn",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 20.sp
+                        ),
+                        color = textPrimaryColor
+                    )
+                    Text(
+                        text = "Choose how to learn",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = textSecondaryColor
+                    )
+                }
+
+                // Right circular button (Trash icon)
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(if (isDarkTheme) Color.White.copy(0.08f) else Color(0xFFF1F5F9))
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = "Dismiss",
+                        tint = textPrimaryColor,
+                        modifier = Modifier.size(22.dp)
+                    )
                 }
             }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, "Close", tint = Color.White.copy(0.6f))
+
+            // 2. Selection Details Card (matches "Room name" and "Add description" card layout)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp)
+                    .shadow(
+                        elevation = if (isDarkTheme) 0.dp else 4.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                        spotColor = Color(0xFF1E293B).copy(alpha = 0.06f)
+                    )
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(cardBackgroundColor)
+                    .border(1.dp, borderStrokeColor, RoundedCornerShape(24.dp))
+                    .padding(vertical = 4.dp)
+            ) {
+                Column {
+                    // Row 1: Selection text
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { /* open full text view or copy */ }
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DocumentScanner,
+                                contentDescription = null,
+                                tint = Color(0xFFDD9F0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Selection",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = textPrimaryColor
+                            )
+                            Text(
+                                text = if (ocrText.isNotBlank()) {
+                                    if (ocrText.length > 50) ocrText.take(50) + "…" else ocrText
+                                } else "No selection captured",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textSecondaryColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = textSecondaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    HorizontalDivider(color = borderStrokeColor, thickness = 1.dp, modifier = Modifier.padding(horizontal = 20.dp))
+
+                    // Row 2: Target Language
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { /* change language action */ }
+                            .padding(horizontal = 20.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Translate,
+                                contentDescription = null,
+                                tint = Color(0xFFDD9F0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Target Language",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = textPrimaryColor
+                            )
+                            Text(
+                                text = "English (Auto-detect)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = textSecondaryColor
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            tint = textSecondaryColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
+
+            Spacer(Modifier.height(16.dp))
+
+            // 3. Suggested Action Avatars Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // First avatar item: "+ More"
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.clickable { /* action list or settings */ }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(cardBackgroundColor)
+                            .border(1.dp, borderStrokeColor, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "More features",
+                            tint = textPrimaryColor,
+                            modifier = Modifier.size(26.dp)
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "More",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = textPrimaryColor
+                        )
+                        Text(
+                            text = "Features",
+                            style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                            color = textSecondaryColor
+                        )
+                    }
+                }
+
+                // Avatars representing actions
+                primaryActions.forEach { action ->
+                    val isSelected = selectedAction == action
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.clickable { selectedAction = action }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .background(if (isSelected) Color(0xFFDD9F0B).copy(alpha = 0.15f) else (if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)))
+                                .border(
+                                    width = if (isSelected) 2.5.dp else 1.dp,
+                                    color = if (isSelected) Color(0xFFDD9F0B) else borderStrokeColor,
+                                    shape = CircleShape
+                                )
+                                .padding(if (isSelected) 3.dp else 0.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                                    .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(action.emoji, fontSize = 28.sp)
+                            }
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = action.label.take(12),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = textPrimaryColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (isSelected) "Active" else "Primary",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                                color = if (isSelected) Color(0xFFDD9F0B) else textSecondaryColor
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 4. Settings Section Header
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 18.sp
+                ),
+                color = textPrimaryColor,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+            )
+
+            // Settings horizontal scrollable cards
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Card 1: Schedule Study
+                Box(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .shadow(
+                            elevation = if (isDarkTheme) 0.dp else 3.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                            spotColor = Color(0xFF1E293B).copy(alpha = 0.06f)
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(cardBackgroundColor)
+                        .border(1.dp, borderStrokeColor, RoundedCornerShape(24.dp))
+                        .clickable { /* schedule study action */ }
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DateRange,
+                                contentDescription = null,
+                                tint = Color(0xFFDD9F0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = "Schedule\nStudy",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 18.sp
+                            ),
+                            color = textPrimaryColor
+                        )
+                    }
+                }
+
+                // Card 2: Auto Save (Switch toggle)
+                Box(
+                    modifier = Modifier
+                        .width(160.dp)
+                        .height(140.dp)
+                        .shadow(
+                            elevation = if (isDarkTheme) 0.dp else 3.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                            spotColor = Color(0xFF1E293B).copy(alpha = 0.06f)
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(cardBackgroundColor)
+                        .border(1.dp, borderStrokeColor, RoundedCornerShape(24.dp))
+                        .clickable { isAutoSaveEnabled = !isAutoSaveEnabled }
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "Auto Save",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                color = textPrimaryColor
+                            )
+                            Text(
+                                text = "Save to vault",
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = textSecondaryColor
+                            )
+                        }
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isAutoSaveEnabled) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                contentDescription = null,
+                                tint = if (isAutoSaveEnabled) Color(0xFFDD9F0B) else textSecondaryColor,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            
+                            // Custom Switch resembling the mockup
+                            Switch(
+                                checked = isAutoSaveEnabled,
+                                onCheckedChange = { isAutoSaveEnabled = it },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Color(0xFFDD9F0B),
+                                    uncheckedThumbColor = textSecondaryColor,
+                                    uncheckedTrackColor = borderStrokeColor
+                                ),
+                                modifier = Modifier.scale(0.85f)
+                            )
+                        }
+                    }
+                }
+
+                // Card 3: Generate Quiz
+                Box(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .shadow(
+                            elevation = if (isDarkTheme) 0.dp else 3.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                            spotColor = Color(0xFF1E293B).copy(alpha = 0.06f)
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(cardBackgroundColor)
+                        .border(1.dp, borderStrokeColor, RoundedCornerShape(24.dp))
+                        .clickable { selectedAction = CircleAction.QUIZ }
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Quiz,
+                                contentDescription = null,
+                                tint = Color(0xFFDD9F0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = "Generate\nQuiz",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 18.sp
+                            ),
+                            color = textPrimaryColor
+                        )
+                    }
+                }
+
+                // Card 4: Create Flashcards
+                Box(
+                    modifier = Modifier
+                        .size(140.dp)
+                        .shadow(
+                            elevation = if (isDarkTheme) 0.dp else 3.dp,
+                            shape = RoundedCornerShape(24.dp),
+                            ambientColor = Color(0xFF64748B).copy(alpha = 0.08f),
+                            spotColor = Color(0xFF1E293B).copy(alpha = 0.06f)
+                        )
+                        .clip(RoundedCornerShape(24.dp))
+                        .background(cardBackgroundColor)
+                        .border(1.dp, borderStrokeColor, RoundedCornerShape(24.dp))
+                        .clickable { selectedAction = CircleAction.FLASHCARDS }
+                        .padding(16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isDarkTheme) Color.White.copy(0.06f) else Color(0xFFFFFBEB)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Style,
+                                contentDescription = null,
+                                tint = Color(0xFFDD9F0B),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Text(
+                            text = "Create\nFlashcards",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Bold,
+                                lineHeight = 18.sp
+                            ),
+                            color = textPrimaryColor
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
         }
 
-        // OCR text preview
-        if (ocrText.isNotBlank()) {
-            Box(
-                modifier = Modifier.fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DarkGlass)
-                    .padding(12.dp)
+        // Sticky Bottom CTA Pill Button ("Let's start!")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(if (isDarkTheme) Color(0xFF0F0F12) else Color(0xFFF8FAFC))
+                .border(
+                    width = 1.dp,
+                    color = borderStrokeColor,
+                    shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+                )
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+        ) {
+            Button(
+                onClick = { onAction(selectedAction) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .shadow(
+                        elevation = 8.dp,
+                        shape = RoundedCornerShape(28.dp),
+                        ambientColor = Color(0xFFDD9F0B).copy(alpha = 0.25f),
+                        spotColor = Color(0xFFDD9F0B).copy(alpha = 0.35f)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDD9F0B))
             ) {
                 Text(
-                    if (ocrText.length > 150) ocrText.take(150) + "…" else ocrText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(0.7f), lineHeight = 18.sp
+                    text = "Let's start!",
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 18.sp
+                    )
                 )
             }
-            Spacer(Modifier.height(12.dp))
         }
-
-        // Primary actions (detected type specific)
-        val primaryActions = detection?.primaryActions
-            ?: listOf(CircleAction.EXPLAIN, CircleAction.SUMMARIZE, CircleAction.NOTES)
-
-        Text("SUGGESTED", style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(0.4f), letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp))
-        Spacer(Modifier.height(8.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            primaryActions.forEach { action ->
-                PrimaryActionButton(action, onAction)
-            }
-        }
-
-        Spacer(Modifier.height(16.dp))
-        Text("ALL ACTIONS", style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(0.4f), letterSpacing = 1.sp,
-            modifier = Modifier.padding(horizontal = 20.dp))
-        Spacer(Modifier.height(8.dp))
-
-        // All actions grid
-        val allActions = CircleAction.entries.filter { it != CircleAction.SAVE_TO_VAULT }
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            modifier = Modifier.fillMaxWidth().heightIn(max = 280.dp)
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement   = Arrangement.spacedBy(8.dp),
-            contentPadding        = PaddingValues(bottom = 16.dp)
-        ) {
-            items(allActions) { action ->
-                GridActionButton(action, onAction)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PrimaryActionButton(action: CircleAction, onClick: (CircleAction) -> Unit) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(20.dp))
-            .background(Brush.linearGradient(listOf(Blue500, Purple500)))
-            .clickable { onClick(action) }
-            .padding(horizontal = 16.dp, vertical = 10.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Text(action.emoji, fontSize = 16.sp)
-            Text(action.label, style = MaterialTheme.typography.labelLarge,
-                color = Color.White, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun GridActionButton(action: CircleAction, onClick: (CircleAction) -> Unit) {
-    Column(
-        modifier = Modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(DarkGlass)
-            .border(0.5.dp, Color.White.copy(0.08f), RoundedCornerShape(14.dp))
-            .clickable { onClick(action) }
-            .padding(12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Text(action.emoji, fontSize = 22.sp)
-        Text(action.label, style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(0.8f), textAlign = TextAlign.Center,
-            maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -311,17 +771,22 @@ private fun ResultPanel(
     onSave       : () -> Unit,
     onDismiss    : () -> Unit,
     onOpenInApp  : ((String?) -> Unit)? = null,
-    onRunAnother : (() -> Unit)? = null
+    onRunAnother : (() -> Unit)? = null,
+    isDarkTheme  : Boolean
 ) {
     val scroll = rememberScrollState()
     LaunchedEffect(resultText.length) {
         if (isStreaming) scroll.animateScrollTo(scroll.maxValue)
     }
 
+    val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
+    val textSecondaryColor = if (isDarkTheme) Color.White.copy(alpha = 0.6f) else Color(0xFF64748B)
+    val borderStrokeColor = if (isDarkTheme) Color.White.copy(alpha = 0.08f) else Color(0xFFE2E8F0)
+
     Column(modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp)) {
         // Result header
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isStreaming) {
@@ -331,29 +796,36 @@ private fun ResultPanel(
                 Box(modifier = Modifier.size(8.dp).background(Blue500.copy(a), CircleShape))
                 Spacer(Modifier.width(8.dp))
             }
-            Text(actionLabel, style = MaterialTheme.typography.titleMedium,
-                color = Color.White, fontWeight = FontWeight.SemiBold,
+            Text(actionLabel, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = textPrimaryColor,
                 modifier = Modifier.weight(1f))
 
             if (isStreaming) {
                 TextButton(onClick = onStop) {
-                    Icon(Icons.Default.Stop, null, tint = Red500, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Stop, null, tint = Color(0xFFEF4444), modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Stop", color = Red500, style = MaterialTheme.typography.labelMedium)
+                    Text("Stop", color = Color(0xFFEF4444), style = MaterialTheme.typography.labelMedium)
                 }
             }
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Default.Close, "Close", tint = Color.White.copy(0.6f))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (isDarkTheme) Color.White.copy(0.08f) else Color.Black.copy(0.04f))
+                    .clickable { onDismiss() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Close, "Close", tint = textPrimaryColor, modifier = Modifier.size(16.dp))
             }
         }
 
         // Result content
         Box(
             modifier = Modifier.fillMaxWidth().weight(1f)
-                .padding(horizontal = 20.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(DarkGlass)
-                .border(0.5.dp, Color.White.copy(0.08f), RoundedCornerShape(16.dp))
+                .padding(horizontal = 24.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(if (isDarkTheme) Color.White.copy(0.04f) else Color.White)
+                .border(1.dp, borderStrokeColor, RoundedCornerShape(20.dp))
                 .padding(16.dp)
         ) {
             Column(modifier = Modifier.fillMaxSize().verticalScroll(scroll)) {
@@ -367,14 +839,14 @@ private fun ResultPanel(
                                 infiniteRepeatable(tween(400, delayMillis = i * 130,
                                     easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "d$i")
                             Box(modifier = Modifier.size((6 * sc).dp)
-                                .background(Color.White.copy(0.5f), CircleShape))
+                                .background(textPrimaryColor.copy(0.5f), CircleShape))
                         }
                     }
                 } else {
                     Text(
-                        if (isStreaming && resultText.isNotEmpty()) "$resultText▍" else resultText,
+                        text = if (isStreaming && resultText.isNotEmpty()) "$resultText▍" else resultText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White.copy(0.9f), lineHeight = 24.sp
+                        color = textPrimaryColor.copy(0.9f), lineHeight = 24.sp
                     )
                 }
             }
@@ -384,25 +856,25 @@ private fun ResultPanel(
         if (!isStreaming) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 OutlinedButton(
                     onClick = onSave,
                     modifier = Modifier.weight(1f),
-                    border = BorderStroke(1.dp, Green500),
+                    border = BorderStroke(1.dp, Color(0xFF10B981)),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Icon(Icons.Default.BookmarkAdd, null, tint = Green500,
+                    Icon(Icons.Default.BookmarkAdd, null, tint = Color(0xFF10B981),
                         modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save", color = Green500)
+                    Text("Save", color = Color(0xFF10B981))
                 }
                 if (onRunAnother != null) {
                     Button(
                         onClick = onRunAnother,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Blue500)
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDD9F0B))
                     ) {
                         Icon(Icons.Default.Refresh, null, tint = Color.White,
                             modifier = Modifier.size(16.dp))
@@ -411,7 +883,7 @@ private fun ResultPanel(
                     }
                 }
             }
-            // "Open Full Screen" — only shown when running as overlay (onOpenInApp != null)
+            // "Open Full Screen"
             if (onOpenInApp != null) {
                 TextButton(
                     onClick = { onOpenInApp("library") },
@@ -419,9 +891,9 @@ private fun ResultPanel(
                         .padding(bottom = 8.dp)
                 ) {
                     Icon(Icons.Default.OpenInFull, null,
-                        tint = Color.White.copy(0.5f), modifier = Modifier.size(14.dp))
+                        tint = textSecondaryColor.copy(0.7f), modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("View in Library", color = Color.White.copy(0.5f),
+                    Text("View in Library", color = textSecondaryColor.copy(0.7f),
                         style = MaterialTheme.typography.labelMedium)
                 }
             }
@@ -434,24 +906,25 @@ private fun ResultPanel(
 // ── Error panel ───────────────────────────────────────────────────────────────
 
 @Composable
-private fun ErrorPanel(message: String, onDismiss: () -> Unit, onRetry: () -> Unit) {
+private fun ErrorPanel(message: String, onDismiss: () -> Unit, onRetry: () -> Unit, isDarkTheme: Boolean) {
+    val textPrimaryColor = if (isDarkTheme) Color.White else Color(0xFF0F172A)
     Column(
         modifier = Modifier.fillMaxWidth().padding(32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Icon(Icons.Default.ErrorOutline, null, tint = Red500, modifier = Modifier.size(48.dp))
+        Icon(Icons.Default.ErrorOutline, null, tint = Color(0xFFEF4444), modifier = Modifier.size(48.dp))
         Text(message, style = MaterialTheme.typography.bodyMedium,
-            color = Color.White.copy(0.8f), textAlign = TextAlign.Center)
+            color = textPrimaryColor.copy(0.8f), textAlign = TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             OutlinedButton(onClick = onDismiss,
-                border = BorderStroke(1.dp, Color.White.copy(0.3f)),
+                border = BorderStroke(1.dp, textPrimaryColor.copy(0.3f)),
                 shape = RoundedCornerShape(12.dp)) {
-                Text("Close", color = Color.White.copy(0.7f))
+                Text("Close", color = textPrimaryColor.copy(0.7f))
             }
             Button(onClick = onRetry, shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Blue500)) {
-                Text("Try Again")
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDD9F0B))) {
+                Text("Try Again", color = Color.White)
             }
         }
     }
@@ -461,10 +934,12 @@ private fun ErrorPanel(message: String, onDismiss: () -> Unit, onRetry: () -> Un
 
 @Composable
 fun CircleErrorScreen(message: String, onDismiss: () -> Unit) {
+    val isDarkTheme = isSystemInDarkTheme()
+    val backgroundColor = if (isDarkTheme) Color(0xFF0B0B0F).copy(0.7f) else Color(0xFFFFFFFF).copy(0.7f)
     Box(
-        modifier = Modifier.fillMaxSize().background(Color.Black.copy(0.7f)),
+        modifier = Modifier.fillMaxSize().background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        ErrorPanel(message = message, onDismiss = onDismiss, onRetry = onDismiss)
+        ErrorPanel(message = message, onDismiss = onDismiss, onRetry = onDismiss, isDarkTheme = isDarkTheme)
     }
 }

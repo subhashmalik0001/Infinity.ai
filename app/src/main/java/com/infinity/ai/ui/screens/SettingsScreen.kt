@@ -21,6 +21,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.painterResource
+import com.infinity.ai.R
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinity.ai.ai.state.AIInferenceState
@@ -80,10 +82,14 @@ fun SettingsScreen(isDarkTheme: Boolean, bottomPadding: Dp, onToggleTheme: () ->
                             ),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("∞", fontSize = 21.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Image(
+                            painter = painterResource(id = R.drawable.logo),
+                            contentDescription = null,
+                            modifier = Modifier.size(width = 38.dp, height = 21.dp)
+                        )
                     }
                     Column {
-                        Text("Infinity User", style = MaterialTheme.typography.titleMedium,
+                        Text("AI User", style = MaterialTheme.typography.titleMedium,
                             color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
                             fontWeight = FontWeight.SemiBold)
                         Text("AI Command Center", style = MaterialTheme.typography.bodySmall,
@@ -140,7 +146,7 @@ fun SettingsScreen(isDarkTheme: Boolean, bottomPadding: Dp, onToggleTheme: () ->
                 SettingsRow(Icons.Default.Code, "Build", "Production Foundation",
                     if (isDarkTheme) TextSecondary else TextSecondaryLight, isDarkTheme)
                 SettingsDivider(isDarkTheme)
-                SettingsRow(Icons.Default.Memory, "Engine", "Infinity-X1",
+                SettingsRow(Icons.Default.Memory, "Engine", "AI-X1",
                     if (isDarkTheme) TextSecondary else TextSecondaryLight, isDarkTheme)
             }
 
@@ -148,10 +154,13 @@ fun SettingsScreen(isDarkTheme: Boolean, bottomPadding: Dp, onToggleTheme: () ->
 
             Column(modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("∞", fontSize = 24.sp,
-                    color = if (isDarkTheme) TextDisabled else TextSecondaryLight.copy(0.4f))
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(width = 72.dp, height = 39.dp)
+                )
                 Spacer(Modifier.height(4.dp))
-                Text("Infinity AI · v1.0.0", style = MaterialTheme.typography.labelSmall,
+                Text("AI · v1.0.0", style = MaterialTheme.typography.labelSmall,
                     color = if (isDarkTheme) TextDisabled else TextSecondaryLight.copy(0.4f))
             }
 

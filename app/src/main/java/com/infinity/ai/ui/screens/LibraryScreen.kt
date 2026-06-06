@@ -406,6 +406,7 @@ fun typeColor(type: EntryType): Color = when (type) {
     EntryType.SCREENSHOT  -> Color(0xFF8B5CF6)
     EntryType.QUIZ        -> Color(0xFF10B981)
     EntryType.NOTE        -> Color(0xFFF59E0B)
+    EntryType.CHAT        -> BluePrimary
 }
 
 fun typeIcon(type: EntryType): ImageVector = when (type) {
@@ -414,4 +415,5 @@ fun typeIcon(type: EntryType): ImageVector = when (type) {
     EntryType.SCREENSHOT  -> Icons.Default.ScreenSearchDesktop
     EntryType.QUIZ        -> Icons.Default.Quiz
     EntryType.NOTE        -> Icons.Default.EditNote
+    EntryType.CHAT        -> Icons.Default.Chat
 }

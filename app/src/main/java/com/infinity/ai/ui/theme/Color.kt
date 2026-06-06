@@ -2,45 +2,69 @@ package com.infinity.ai.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Dark backgrounds ───────────────────────────────────────────────────────────
-val DarkBg              = Color(0xFF0A0E1A)
-val DarkSurface         = Color(0xFF111827)
-val DarkSurfaceElevated = Color(0xFF1A2235)
-val DarkBorder          = Color(0xFF1E2D45)
-val DarkGlass           = Color(0x18FFFFFF)
+// ── Brand / Yellow (Gold) ─────────────────────────────────────────────────────
+val BluePrimary      = Color(0xFFDD9F0B)
+val BlueDark         = Color(0xFFB07F08)
+val BlueGradientStart = Color(0xFFDD9F0B)
+val BlueGradientEnd   = Color(0xFFFBBF24)
 
-// ── Light backgrounds ──────────────────────────────────────────────────────────
-val LightBg              = Color(0xFFF8FAFC)
-val LightSurface         = Color(0xFFFFFFFF)
-val LightSurfaceElevated = Color(0xFFF1F5F9)
-val LightBorder          = Color(0xFFE5EAF3)
-val LightGlass           = Color(0xFAFFFFFF)
+// ── Backgrounds ──────────────────────────────────────────────────────────────
+val LightBlueBgStart  = Color(0xFFF8F9FA)
+val LightBlueBgEnd    = Color(0xFFF8F9FA)
+val CardWhite         = Color(0xFFFFFFFF)
+val BorderLight       = Color(0xFFE2E8F0)
 
-// ── Brand — professional blue ──────────────────────────────────────────────────
-val Blue500      = Color(0xFF4F8CFF)   // primary
-val Blue600      = Color(0xFF3A7BF7)   // pressed
-val Blue400      = Color(0xFF6FA8FF)   // secondary / lighter
-val Blue50       = Color(0xFFEEF4FF)   // tint background
-val Blue100      = Color(0xFFDBEAFF)   // softer tint
-val BlueAlpha12  = Color(0x1F4F8CFF)
+// ── Text ─────────────────────────────────────────────────────────────────────
+val TextPrimary       = Color(0xFF0F172A)   // Slate 900
+val TextSecondary     = Color(0xFF64748B)   // Slate 500
+val TextMuted         = Color(0xFF94A3B8)   // Slate 400
+val TextOnPrimary     = Color(0xFFFFFFFF)
 
-// ── Neutral grays ─────────────────────────────────────────────────────────────
-val GradStart = Color(0xFFF8FAFC)
-val GradMid   = Color(0xFFF1F5F9)
-val GradEnd   = Color(0xFFE5EAF3)
-val OrbColor1 = Color(0xFF93C5FD)
-val OrbColor2 = Color(0xFF60A5FA)
-val OrbColor3 = Color(0xFFBFDBFE)
+// ── Status ───────────────────────────────────────────────────────────────────
+val SuccessGreen      = Color(0xFF22C55E)
+val ErrorRed          = Color(0xFFEF4444)
+val WarnAmber         = Color(0xFFF59E0B)
 
-// ── Text ───────────────────────────────────────────────────────────────────────
-val TextPrimary        = Color(0xFFE8EDF5)   // dark-mode primary
-val TextSecondary      = Color(0xFF7A8BA8)   // dark-mode secondary
-val TextDisabled       = Color(0xFF3D4E65)
-val TextPrimaryLight   = Color(0xFF0F172A)   // light-mode primary
-val TextSecondaryLight = Color(0xFF64748B)   // light-mode secondary
-val TextTertiary       = Color(0xFF94A3B8)   // extra subtle
+// ── Theme Aliases & Compatibility Layers ─────────────────────────────────────
+val GoldPrimary       = BluePrimary
+val GoldDark          = BlueDark
+val GoldSubtle        = Color(0x1ADD9F0B)   // 10% alpha of yellow
+val GoldGlow          = Color(0x2BDD9F0B)   // 17% alpha
+val GoldBorderActive  = Color(0x40DD9F0B)   // 25% alpha
+val TextOnGold        = TextOnPrimary
 
-// ── Status ─────────────────────────────────────────────────────────────────────
-val SuccessGreen = Color(0xFF10B981)
-val ErrorRed     = Color(0xFFEF4444)
-val WarnAmber    = Color(0xFFF59E0B)
+val BgDark            = LightBlueBgEnd
+val SurfaceDark       = CardWhite
+val CardSurface       = CardWhite
+val ElevatedCard      = Color(0xFFF8FAFC)
+val CardGlass         = Color(0xFFFFFFFF)
+val GradWarmMid       = Color(0xFFF1F5F9)
+val BorderSubtle      = BorderLight
+
+val Blue500           = BluePrimary
+val Blue400           = BlueDark
+val BlueAlpha12       = GoldSubtle
+val DarkBg            = LightBlueBgEnd
+val DarkSurface       = CardWhite
+val DarkSurfaceElevated = Color(0xFFF8FAFC)
+val DarkBorder        = BorderLight
+val DarkGlass         = Color(0x0A000000)
+val LightBg           = LightBlueBgEnd
+val LightSurface      = CardWhite
+val LightSurfaceElevated = Color(0xFFF8FAFC)
+val LightBorder       = BorderLight
+val LightGlass        = CardWhite
+val TextPrimaryLight  = TextPrimary
+val TextSecondaryLight = TextSecondary
+val TextDisabled      = TextMuted
+val TextTertiary      = TextMuted
+
+// Extra Shorthands
+val Blue50            = Color(0xFFFFFBEB)
+val Blue600           = Color(0xFFD97706)
+val GradStart         = Color(0xFFF8FAFC)
+val GradMid           = Color(0xFFF1F5F9)
+val GradEnd           = Color(0xFFFEF3C7) // warm light yellow/amber instead of blue-grey
+val OrbColor1         = Color(0xFFFDE047)
+val OrbColor2         = Color(0xFFFACC15)
+val OrbColor3         = Color(0xFFFEF08A)

@@ -9,9 +9,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.infinity.ai.ui.components.GradientBackground
 import kotlinx.coroutines.delay
+
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import com.infinity.ai.R
 
 @Composable
 fun SplashScreen(onNavigate: () -> Unit) {
@@ -25,12 +30,13 @@ fun SplashScreen(onNavigate: () -> Unit) {
 
     GradientBackground(darkTheme = true, modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().statusBarsPadding(), contentAlignment = Alignment.Center) {
-            Text(
-                text = "∞",
-                fontSize = 80.sp,
-                fontWeight = FontWeight.Thin,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.alpha(alpha.value)
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "Infinity Logo",
+                modifier = Modifier
+                    .width(260.dp)
+                    .height(142.dp)
+                    .alpha(alpha.value)
             )
         }
     }

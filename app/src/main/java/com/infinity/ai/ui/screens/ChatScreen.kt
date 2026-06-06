@@ -17,22 +17,35 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
-import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -40,6 +53,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.infinity.ai.ai.state.AIInferenceState
 import com.infinity.ai.data.library.EntryType
 import com.infinity.ai.data.library.LibraryRepository
+import com.infinity.ai.R
 import com.infinity.ai.model.ChatMessage
 import com.infinity.ai.ui.components.AiBodyOrb
 import com.infinity.ai.ui.components.GradientBackground
@@ -56,6 +70,7 @@ fun ChatScreen(
     isDarkTheme: Boolean,
     bottomPadding: Dp,
     onNavigateToVoice: () -> Unit,
+    onNavigateBack: () -> Unit,
     chatViewModel: ChatViewModel = viewModel()
 ) {
     val messages        by chatViewModel.messages.collectAsState()
@@ -73,9 +88,15 @@ fun ChatScreen(
     val isGenerating = aiState is AIInferenceState.Thinking ||
                        aiState is AIInferenceState.Responding
 
-    LaunchedEffect(messages.size, isGenerating) {
+    LaunchedEffect(messages.size, isGenerating, messages.lastOrNull()?.text?.length) {
         val count = listState.layoutInfo.totalItemsCount
-        if (count > 0) listState.animateScrollToItem(count - 1)
+        if (count > 0) {
+            if (isGenerating) {
+                listState.scrollToItem(count - 1) // Snap scroll for immediate updates during streaming
+            } else {
+                listState.animateScrollToItem(count - 1) // Smooth scroll when new messages are added or generation stops
+            }
+        }
     }
 
     fun copyToClipboard(text: String, label: String = "AI Response") {
@@ -97,7 +118,7 @@ fun ChatScreen(
         scope.launch(Dispatchers.IO) {
             val repo = LibraryRepository.getInstance(context)
             repo.save(
-                type       = EntryType.NOTE,
+                type       = EntryType.CHAT,
                 content    = if (prompt.isNotBlank()) "Q: $prompt\n\nA: $response" else response,
                 title      = prompt.take(60).ifBlank { "Chat Response" },
                 sourceInfo = "Infinity Chat"
@@ -111,80 +132,144 @@ fun ChatScreen(
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(
                     snackbarData    = data,
-                    containerColor  = if (isDarkTheme) DarkSurfaceElevated else TextPrimaryLight,
-                    contentColor    = if (isDarkTheme) TextPrimary else LightSurface,
+                    containerColor  = TextPrimary,
+                    contentColor    = LightSurface,
                     shape           = RoundedCornerShape(12.dp),
                     modifier        = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
         },
-        containerColor = Color.Transparent
+        containerColor = Color(0xFFF8F9FA)
     ) { innerPadding ->
-        GradientBackground(darkTheme = isDarkTheme, modifier = Modifier.fillMaxSize()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .padding(bottom = maxOf(bottomPadding, innerPadding.calculateBottomPadding()))
-                    .imePadding()
-            ) {
-                ChatHeader(
-                    isDarkTheme = isDarkTheme,
-                    aiState     = aiState,
-                    onClearChat = { chatViewModel.clearChat() }
-                )
+        val density = LocalDensity.current
+        val isKeyboardOpen = WindowInsets.ime.getBottom(density) > 0
+        val calculatedBottomPadding = if (isKeyboardOpen) 0.dp else maxOf(bottomPadding, innerPadding.calculateBottomPadding())
 
-                AnimatedVisibility(visible = isExtracting) {
-                    ExtractionProgressBar(progress = extractProgress, isDarkTheme = isDarkTheme)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF8F9FA))
+                .statusBarsPadding()
+                .padding(bottom = calculatedBottomPadding)
+                .imePadding()
+        ) {
+            // ── Global Header Row (Back on left, 3-dots option on right) ──────
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Back button
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(CardWhite)
+                        .border(0.8.dp, BorderLight, CircleShape)
+                        .clickable(onClick = onNavigateBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        "Back",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
 
-                if (showSuggestions && messages.isEmpty()) {
-                    EmptyState(
-                        modifier          = Modifier.weight(1f),
-                        isDarkTheme       = isDarkTheme,
-                        aiState           = aiState,
-                        onSuggestionClick = { chatViewModel.startFromSuggestion(it) }
+                // 3-dots Menu Button
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .background(CardWhite)
+                        .border(0.8.dp, BorderLight, CircleShape)
+                        .clickable { chatViewModel.clearChat() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        "Options",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(18.dp)
                     )
-                } else {
-                    val promptMap = remember(messages) {
-                        buildMap {
-                            messages.forEachIndexed { i, msg ->
-                                if (!msg.isUser) {
-                                    val prev = messages.getOrNull(i - 1)
-                                    put(msg.id, prev?.text ?: "")
-                                }
+                }
+            }
+
+            AnimatedVisibility(visible = isExtracting) {
+                ExtractionProgressBar(progress = extractProgress, isDarkTheme = false)
+            }
+
+            if (messages.isEmpty()) {
+                CenteredEmptyState(
+                    modifier = Modifier.weight(1f),
+                    input = input,
+                    onInputChange = { chatViewModel.onInputChange(it) },
+                    onSend = { chatViewModel.sendMessage(); keyboardController?.hide() },
+                    onVoice = onNavigateToVoice,
+                    onSuggestionClick = { chatViewModel.startFromSuggestion(it) }
+                )
+            } else {
+                val promptMap = remember(messages) {
+                    buildMap {
+                        messages.forEachIndexed { i, msg ->
+                            if (!msg.isUser) {
+                                val prev = messages.getOrNull(i - 1)
+                                put(msg.id, prev?.text ?: "")
+                            }
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    state           = listState,
+                    modifier        = Modifier.weight(1f),
+                    contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Optional Date Header
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(CardWhite)
+                                    .border(0.8.dp, BorderLight, RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    "Today, 09:00 PM",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TextSecondary
+                                )
                             }
                         }
                     }
 
-                    LazyColumn(
-                        state           = listState,
-                        modifier        = Modifier.weight(1f),
-                        contentPadding  = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        items(messages, key = { it.id }) { msg ->
-                            val streaming = isGenerating && msg == messages.last() && !msg.isUser
-                            ChatBubble(
-                                message      = msg,
-                                isDarkTheme  = isDarkTheme,
-                                isStreaming  = streaming,
-                                prompt       = promptMap[msg.id] ?: "",
-                                onCopy       = { copyToClipboard(msg.text) },
-                                onShare      = { shareText(promptMap[msg.id] ?: "", msg.text) },
-                                onSave       = { saveToVault(context, promptMap[msg.id] ?: "", msg.text) },
-                                onRegenerate = {
-                                    val p = promptMap[msg.id] ?: ""
-                                    if (p.isNotBlank()) chatViewModel.startFromSuggestion(p)
-                                }
-                            )
-                        }
+                    items(messages, key = { it.id }) { msg ->
+                        val streaming = isGenerating && msg == messages.last() && !msg.isUser
+                        ChatBubble(
+                            message      = msg,
+                            isDarkTheme  = false,
+                            isStreaming  = streaming,
+                            prompt       = promptMap[msg.id] ?: "",
+                            onCopy       = { copyToClipboard(msg.text) },
+                            onShare      = { shareText(promptMap[msg.id] ?: "", msg.text) },
+                            onSave       = { saveToVault(context, promptMap[msg.id] ?: "", msg.text) },
+                            onRegenerate = {
+                                val p = promptMap[msg.id] ?: ""
+                                if (p.isNotBlank()) chatViewModel.startFromSuggestion(p)
+                            }
+                        )
                     }
                 }
 
+                // ChatInputBar
                 ChatInputBar(
                     input         = input,
-                    isDarkTheme   = isDarkTheme,
+                    isDarkTheme   = false,
                     isGenerating  = isGenerating,
                     onInputChange = { chatViewModel.onInputChange(it) },
                     onSend        = { chatViewModel.sendMessage(); keyboardController?.hide() },
@@ -195,78 +280,6 @@ fun ChatScreen(
         }
     }
 }
-
-// ── Header ─────────────────────────────────────────────────────────────────────
-
-@Composable
-private fun ChatHeader(isDarkTheme: Boolean, aiState: AIInferenceState, onClearChat: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        val dotColor = when (aiState) {
-            is AIInferenceState.Idle       -> SuccessGreen
-            is AIInferenceState.Loading    -> WarnAmber
-            is AIInferenceState.Thinking   -> Blue500
-            is AIInferenceState.Responding -> Blue500
-            is AIInferenceState.Error      -> ErrorRed
-        }
-        val statusLabel = when (aiState) {
-            is AIInferenceState.Idle       -> "Ready"
-            is AIInferenceState.Loading    -> "Loading…"
-            is AIInferenceState.Thinking   -> "Thinking…"
-            is AIInferenceState.Responding -> "Responding…"
-            is AIInferenceState.Error      -> "Error"
-        }
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(50.dp))
-                .background(if (isDarkTheme) DarkSurface else LightSurface)
-                .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, RoundedCornerShape(50.dp))
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp)
-        ) {
-            Box(modifier = Modifier.size(6.dp).background(dotColor, CircleShape))
-            Text(
-                "Infinity AI",
-                style = MaterialTheme.typography.labelLarge,
-                color = if (isDarkTheme) TextPrimary else TextPrimaryLight
-            )
-            Text(
-                statusLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = dotColor
-            )
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(
-                    if (isDarkTheme) DarkSurface else LightSurface,
-                    CircleShape
-                )
-                .border(1.dp, if (isDarkTheme) DarkBorder else LightBorder, CircleShape)
-                .clickable(onClick = onClearChat),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Add, "New chat",
-                tint = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                modifier = Modifier.size(16.dp)
-            )
-        }
-    }
-}
-
-// ── Extraction progress bar ────────────────────────────────────────────────────
 
 @Composable
 private fun ExtractionProgressBar(progress: Float, isDarkTheme: Boolean) {
@@ -282,12 +295,12 @@ private fun ExtractionProgressBar(progress: Float, isDarkTheme: Boolean) {
             Text(
                 "Setting up AI model…",
                 style = MaterialTheme.typography.labelSmall,
-                color = if (isDarkTheme) TextSecondary else TextSecondaryLight
+                color = TextSecondary
             )
             Text(
                 "${(progress * 100).toInt()}%",
                 style = MaterialTheme.typography.labelSmall,
-                color = Blue500,
+                color = BluePrimary,
                 fontWeight = FontWeight.SemiBold
             )
         }
@@ -295,19 +308,17 @@ private fun ExtractionProgressBar(progress: Float, isDarkTheme: Boolean) {
         LinearProgressIndicator(
             progress        = { progress },
             modifier        = Modifier.fillMaxWidth().height(3.dp).clip(RoundedCornerShape(2.dp)),
-            color           = Blue500,
+            color           = BluePrimary,
             trackColor      = Blue50
         )
         Spacer(Modifier.height(4.dp))
         Text(
             "This only happens once on first launch",
             style = MaterialTheme.typography.labelSmall,
-            color = if (isDarkTheme) TextDisabled else TextTertiary
+            color = TextSecondary
         )
     }
 }
-
-// ── Empty state ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun EmptyState(
@@ -320,55 +331,153 @@ private fun EmptyState(
         modifier = modifier
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.Start
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(16.dp))
-        Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            AiBodyOrb(orbState = aiState.toOrbState(), isDarkTheme = isDarkTheme, size = 110.dp)
+        Spacer(Modifier.height(32.dp))
+
+        // App logo (large infinity symbol)
+        Box(
+            modifier = Modifier
+                .size(110.dp)
+                .clip(CircleShape)
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(Color(0xFFDD9F0B), Color(0xFFFBBF24))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = "Infinity Logo",
+                modifier = Modifier.size(width = 80.dp, height = 44.dp)
+            )
         }
+
         Spacer(Modifier.height(24.dp))
-        Text(
-            "Hey there 👋",
-            style = MaterialTheme.typography.headlineMedium,
-            color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(4.dp))
+
         Text(
             "How can I help you today?",
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (isDarkTheme) TextSecondary else TextSecondaryLight
+            style = MaterialTheme.typography.headlineSmall.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            color = TextPrimary,
+            textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(24.dp))
-        Text(
-            "SUGGESTIONS",
-            style = MaterialTheme.typography.labelSmall,
-            color = if (isDarkTheme) TextSecondary else TextSecondaryLight,
-            letterSpacing = 1.2.sp
-        )
-        Spacer(Modifier.height(10.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(
-                Triple(Icons.Default.Chat,     "Ask me anything",    "Start a conversation"),
-                Triple(Icons.Default.Code,     "Help me write code", "Generate or review code"),
-                Triple(Icons.Default.EditNote, "Summarize my notes", "AI-powered summaries"),
-                Triple(Icons.Default.Language, "Translate text",     "Any language supported")
-            ).forEach { (icon, title, sub) ->
-                AITaskCard(
-                    icon     = icon,
-                    title    = title,
-                    subtitle = sub,
-                    iconBg   = Blue500,
-                    onClick  = { onSuggestionClick(title) },
-                    darkTheme = isDarkTheme
+
+        Spacer(Modifier.height(20.dp))
+
+        // Model selector pill
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color(0xFFF1F5F9))
+                .border(1.dp, BorderLight, RoundedCornerShape(20.dp))
+                .clickable { }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "AI Chat",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary
+                )
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    null,
+                    tint = TextSecondary,
+                    modifier = Modifier.size(18.dp)
                 )
             }
         }
-        Spacer(Modifier.height(16.dp))
+
+        Spacer(Modifier.height(28.dp))
+
+        // Quick action chips
+        val chips = listOf(
+            Pair(Icons.Default.Edit, "Write"),
+            Pair(Icons.Default.School, "Learn"),
+            Pair(Icons.Default.Code, "Code"),
+            Pair(Icons.Default.Folder, "File Analyze")
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+        ) {
+            chips.forEach { (icon, label) ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(CardWhite)
+                        .border(1.dp, BorderLight, RoundedCornerShape(20.dp))
+                        .clickable { onSuggestionClick(label) }
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            icon,
+                            contentDescription = label,
+                            tint = TextPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                            color = TextPrimary
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .background(CardWhite)
+                .border(1.dp, BorderLight, RoundedCornerShape(20.dp))
+                .clickable { onSuggestionClick("Create Image") }
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(5.dp)
+            ) {
+                Icon(
+                    Icons.Default.AutoAwesome,
+                    contentDescription = "Create Image",
+                    tint = Color(0xFFE040FB),
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    "Create Image",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                    color = TextPrimary
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        // View History link
+        Text(
+            "View History",
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = BluePrimary,
+            modifier = Modifier.clickable { }
+        )
+
+        Spacer(Modifier.height(24.dp))
     }
 }
-
-// ── Input bar ──────────────────────────────────────────────────────────────────
 
 @Composable
 private fun ChatInputBar(
@@ -382,110 +491,138 @@ private fun ChatInputBar(
 ) {
     val canSend = input.isNotBlank() && !isGenerating
 
-    Surface(
-        color = if (isDarkTheme) DarkSurface.copy(alpha = 0.97f) else LightSurface,
-        tonalElevation = 0.dp
+    // Main input card
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(CardWhite)
+            .border(1.dp, BorderLight, RoundedCornerShape(24.dp))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 20.dp, vertical = 14.dp)
         ) {
-            Row(
+            // Text input area
+            BasicTextField(
+                value = input,
+                onValueChange = onInputChange,
                 modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(22.dp))
-                    .background(
-                        if (isDarkTheme) DarkSurfaceElevated else LightSurfaceElevated
-                    )
-                    .border(
-                        1.dp,
-                        if (isDarkTheme) DarkBorder else LightBorder,
-                        RoundedCornerShape(22.dp)
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                    .fillMaxWidth()
+                    .heightIn(min = 46.dp, max = 120.dp),
+                enabled = !isGenerating,
+                textStyle = MaterialTheme.typography.bodyLarge.copy(
+                    color = TextPrimary,
+                    lineHeight = 22.sp
+                ),
+                cursorBrush = SolidColor(BluePrimary),
+                decorationBox = { inner ->
+                    if (input.isEmpty()) {
+                        Text(
+                            if (isGenerating) "Generating…" else "How can I help you today?",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = TextSecondary.copy(alpha = 0.55f)
+                        )
+                    }
+                    inner()
+                },
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Send,
+                    capitalization = KeyboardCapitalization.Sentences
+                ),
+                keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() })
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // Bottom row: Plus | Model label | Voice | Send
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                BasicTextField(
-                    value         = input,
-                    onValueChange = onInputChange,
-                    modifier      = Modifier.weight(1f),
-                    enabled       = !isGenerating,
-                    textStyle     = MaterialTheme.typography.bodyMedium.copy(
-                        color = if (isDarkTheme) TextPrimary else TextPrimaryLight,
-                        lineHeight = 20.sp
-                    ),
-                    cursorBrush   = SolidColor(Blue500),
-                    decorationBox = { inner ->
-                        if (input.isEmpty()) {
-                            Text(
-                                if (isGenerating) "Generating…" else "Message Infinity…",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (isDarkTheme) TextSecondary else TextSecondaryLight
+                // Plus button
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFF1F5F9))
+                        .clickable { },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Add",
+                        tint = TextSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                // Model label in center
+                Text(
+                    "AI Chat",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                    color = TextSecondary.copy(alpha = 0.7f)
+                )
+
+                // Right action buttons
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Voice / Stop / Send
+                    if (isGenerating) {
+                        IconButton(
+                            onClick = onStop,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Stop,
+                                "Stop",
+                                tint = ErrorRed,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
-                        inner()
-                    },
-                    keyboardOptions = KeyboardOptions(
-                        imeAction      = ImeAction.Send,
-                        capitalization = KeyboardCapitalization.Sentences
-                    ),
-                    keyboardActions = KeyboardActions(onSend = { if (canSend) onSend() }),
-                    maxLines = 5
-                )
-            }
-
-            // Send / Stop / Mic button
-            Box(
-                modifier = Modifier
-                    .size(46.dp)
-                    .background(
-                        when {
-                            isGenerating -> ErrorRed
-                            canSend      -> Blue500
-                            else         -> if (isDarkTheme) DarkSurfaceElevated else LightSurfaceElevated
-                        },
-                        CircleShape
-                    )
-                    .border(
-                        1.dp,
-                        if (!isGenerating && !canSend)
-                            if (isDarkTheme) DarkBorder else LightBorder
-                        else Color.Transparent,
-                        CircleShape
-                    )
-                    .clickable {
-                        when {
-                            isGenerating -> onStop()
-                            canSend      -> onSend()
-                            else         -> onVoice()
+                    } else if (canSend) {
+                        IconButton(
+                            onClick = onSend,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(BluePrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.Send,
+                                    "Send",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
                         }
-                    },
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = when {
-                        isGenerating -> Icons.Default.Stop
-                        canSend      -> Icons.Default.ArrowUpward
-                        else         -> Icons.Default.Mic
-                    },
-                    contentDescription = when {
-                        isGenerating -> "Stop"
-                        canSend      -> "Send"
-                        else         -> "Voice"
-                    },
-                    tint     = if (canSend || isGenerating) Color.White
-                               else if (isDarkTheme) TextSecondary else TextSecondaryLight,
-                    modifier = Modifier.size(20.dp)
-                )
+                    } else {
+                        IconButton(
+                            onClick = onVoice,
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Mic,
+                                "Voice",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
 }
-
-// ── Chat bubble ────────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -499,161 +636,152 @@ private fun ChatBubble(
     onSave      : () -> Unit,
     onRegenerate: () -> Unit
 ) {
-    var showSheet by remember { mutableStateOf(false) }
+    val isUser = message.isUser
 
     Column(
-        modifier            = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.isUser) Alignment.End else Alignment.Start
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
     ) {
-        if (!message.isUser) {
+        if (!isUser) {
             Row(
-                verticalAlignment     = Alignment.CenterVertically,
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
-                modifier              = Modifier.padding(bottom = 5.dp, start = 2.dp)
+                modifier = Modifier.padding(bottom = 5.dp, start = 2.dp)
             ) {
                 Box(
-                    modifier         = Modifier
+                    modifier = Modifier
                         .size(20.dp)
                         .background(Blue50, CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("∞", style = MaterialTheme.typography.labelSmall, color = Blue500, fontSize = 10.sp)
+                    Text("∞", style = MaterialTheme.typography.labelSmall, color = BluePrimary, fontSize = 10.sp)
                 }
                 Text(
-                    "Infinity",
+                    "AI",
                     style = MaterialTheme.typography.labelSmall,
-                    color = Blue500,
+                    color = BluePrimary,
                     fontWeight = FontWeight.SemiBold
                 )
             }
         }
 
         Row(
-            verticalAlignment     = Alignment.Top,
-            horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
-            modifier              = Modifier.fillMaxWidth()
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
+            modifier = Modifier.fillMaxWidth()
         ) {
-            if (!message.isUser) {
-                AiBubbleContent(
-                    message     = message,
-                    isDarkTheme = isDarkTheme,
-                    isStreaming = isStreaming,
-                    modifier    = Modifier
-                        .weight(1f, fill = false)
-                        .widthIn(max = 300.dp)
-                        .combinedClickable(
-                            onClick     = {},
-                            onLongClick = { if (!isStreaming && message.text.isNotBlank()) showSheet = true }
-                        )
-                )
-
-                AnimatedVisibility(
-                    visible = !isStreaming && message.text.isNotBlank(),
-                    enter   = fadeIn(tween(200)) + slideInHorizontally { it / 2 },
-                    exit    = fadeOut(tween(150))
-                ) {
-                    Row(
-                        modifier              = Modifier.padding(start = 4.dp, top = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(0.dp)
-                    ) {
-                        BubbleActionIcon(Icons.Default.ContentCopy, "Copy",  onCopy)
-                        BubbleActionIcon(Icons.Default.Share,       "Share", onShare)
-                        BubbleActionIcon(Icons.Default.BookmarkAdd, "Save",  onSave)
-                    }
-                }
-            } else {
+            if (isUser) {
+                // User Bubble
                 Box(
                     modifier = Modifier
                         .widthIn(max = 300.dp)
-                        .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
-                        .background(Blue500)
-                        .padding(horizontal = 14.dp, vertical = 11.dp)
+                        .clip(RoundedCornerShape(
+                            topStart = 16.dp, topEnd = 16.dp,
+                            bottomStart = 16.dp, bottomEnd = 2.dp
+                        ))
+                        .background(BluePrimary)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Text(
                         message.text,
-                        style      = MaterialTheme.typography.bodyMedium,
-                        color      = Color.White,
-                        lineHeight = 22.sp
-                    )
-                }
-            }
-        }
-    }
-
-    if (showSheet) {
-        MessageActionsSheet(
-            onDismiss    = { showSheet = false },
-            onCopy       = { showSheet = false; onCopy() },
-            onShare      = { showSheet = false; onShare() },
-            onSave       = { showSheet = false; onSave() },
-            onRegenerate = { showSheet = false; onRegenerate() }
-        )
-    }
-}
-
-// ── AI bubble content ──────────────────────────────────────────────────────────
-
-@Composable
-private fun AiBubbleContent(
-    message     : ChatMessage,
-    isDarkTheme : Boolean,
-    isStreaming : Boolean,
-    modifier    : Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp))
-            .background(if (isDarkTheme) DarkSurface else LightSurface)
-            .border(
-                1.dp,
-                if (isDarkTheme) DarkBorder else LightBorder,
-                RoundedCornerShape(4.dp, 18.dp, 18.dp, 18.dp)
-            )
-            .padding(horizontal = 14.dp, vertical = 11.dp)
-    ) {
-        if (message.text.isEmpty() && isStreaming) {
-            TypingDots(isDarkTheme)
-        } else {
-            val segments = remember(message.text) { parseMessageSegments(message.text) }
-
-            if (segments.size == 1 && segments[0] is MessageSegment.PlainText) {
-                SelectionContainer {
-                    Text(
-                        text = buildAnnotatedString {
-                            append(if (isStreaming && message.text.isNotEmpty()) message.text + "▍" else message.text)
-                        },
-                        style      = MaterialTheme.typography.bodyMedium,
-                        color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White,
                         lineHeight = 22.sp
                     )
                 }
             } else {
-                val context = LocalContext.current
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    segments.forEach { seg ->
-                        when (seg) {
-                            is MessageSegment.PlainText -> {
-                                if (seg.text.isNotBlank()) {
+                // Assistant Bubble Card (with divider and inner action row)
+                Box(
+                    modifier = Modifier
+                        .widthIn(max = 300.dp)
+                        .clip(RoundedCornerShape(
+                            topStart = 2.dp, topEnd = 16.dp,
+                            bottomStart = 16.dp, bottomEnd = 16.dp
+                        ))
+                        .background(CardWhite)
+                        .border(
+                            0.8.dp,
+                            BorderLight,
+                            RoundedCornerShape(2.dp, 16.dp, 16.dp, 16.dp)
+                        )
+                ) {
+                    Column {
+                        // Message text / Code blocks
+                        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                            if (message.text.isEmpty() && isStreaming) {
+                                TypingDots(isDarkTheme)
+                            } else {
+                                val segments = remember(message.text) { parseMessageSegments(message.text) }
+                                if (segments.size == 1 && segments[0] is MessageSegment.PlainText) {
                                     SelectionContainer {
                                         Text(
-                                            text       = seg.text,
-                                            style      = MaterialTheme.typography.bodyMedium,
-                                            color      = if (isDarkTheme) TextPrimary else TextPrimaryLight,
+                                            text = message.text,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            color = TextPrimary,
                                             lineHeight = 22.sp
                                         )
                                     }
+                                } else {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        segments.forEach { seg ->
+                                            when (seg) {
+                                                is MessageSegment.PlainText -> {
+                                                    if (seg.text.isNotBlank()) {
+                                                        SelectionContainer {
+                                                            Text(
+                                                                text = seg.text,
+                                                                style = MaterialTheme.typography.bodyLarge,
+                                                                color = TextPrimary,
+                                                                lineHeight = 22.sp
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                is MessageSegment.CodeBlock -> {
+                                                    CodeBlockView(
+                                                        code = seg.code,
+                                                        language = seg.language,
+                                                        isDarkTheme = isDarkTheme,
+                                                        onCopyCode = onCopy
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                            is MessageSegment.CodeBlock -> {
-                                CodeBlockView(
-                                    code        = seg.code,
-                                    language    = seg.language,
-                                    isDarkTheme = isDarkTheme,
-                                    onCopyCode  = {
-                                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                        cm.setPrimaryClip(ClipData.newPlainText("Code", seg.code))
+                        }
+
+                        // Divider and Inline Action Icons
+                        if (!isStreaming && message.text.isNotEmpty()) {
+                            HorizontalDivider(color = BorderLight, thickness = 0.8.dp)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    IconButton(onClick = onCopy, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.ContentCopy, "Copy", tint = TextSecondary, modifier = Modifier.size(16.dp))
                                     }
-                                )
+                                    IconButton(onClick = onSave, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.Bookmark, "Save", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(onClick = { /* Liked */ }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.ThumbUp, "Like", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(onClick = { /* Speak */ }, modifier = Modifier.size(32.dp)) {
+                                        Icon(Icons.Default.VolumeUp, "Speak", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                                IconButton(onClick = onRegenerate, modifier = Modifier.size(32.dp)) {
+                                    Icon(Icons.Default.Refresh, "Regenerate", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                }
                             }
                         }
                     }
@@ -663,8 +791,6 @@ private fun AiBubbleContent(
     }
 }
 
-// ── Code block ─────────────────────────────────────────────────────────────────
-
 @Composable
 private fun CodeBlockView(
     code        : String,
@@ -672,8 +798,8 @@ private fun CodeBlockView(
     isDarkTheme : Boolean,
     onCopyCode  : () -> Unit
 ) {
-    val codeBg   = if (isDarkTheme) Color(0xFF0D1117) else Color(0xFFF6F8FA)
-    val headerBg = if (isDarkTheme) Color(0xFF161B22) else Color(0xFFEAECF0)
+    val codeBg   = Color(0xFFF6F8FA)
+    val headerBg = Color(0xFFEAECF0)
     var copied   by remember { mutableStateOf(false) }
     val scope    = rememberCoroutineScope()
 
@@ -681,7 +807,7 @@ private fun CodeBlockView(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, if (isDarkTheme) Color(0xFF30363D) else Color(0xFFD8DEE4), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFFD8DEE4), RoundedCornerShape(12.dp))
             .background(codeBg)
     ) {
         Row(
@@ -703,7 +829,7 @@ private fun CodeBlockView(
                 Text(
                     language.ifBlank { "code" },
                     style      = MaterialTheme.typography.labelSmall,
-                    color      = if (isDarkTheme) Color(0xFF8B949E) else Color(0xFF57606A),
+                    color      = Color(0xFF57606A),
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -718,14 +844,14 @@ private fun CodeBlockView(
                 Icon(
                     if (copied) Icons.Default.Check else Icons.Default.ContentCopy,
                     null,
-                    tint     = if (copied) SuccessGreen else Blue500,
+                    tint     = if (copied) SuccessGreen else BluePrimary,
                     modifier = Modifier.size(13.dp)
                 )
                 Spacer(Modifier.width(4.dp))
                 Text(
                     if (copied) "Copied!" else "Copy",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (copied) SuccessGreen else Blue500
+                    color = if (copied) SuccessGreen else BluePrimary
                 )
             }
         }
@@ -737,120 +863,12 @@ private fun CodeBlockView(
                     .padding(14.dp)
                     .horizontalScroll(rememberScrollState()),
                 style     = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                color     = if (isDarkTheme) Color(0xFFE6EDF3) else Color(0xFF1F2328),
+                color     = Color(0xFF1F2328),
                 lineHeight = 20.sp
             )
         }
     }
 }
-
-// ── Inline action icon ─────────────────────────────────────────────────────────
-
-@Composable
-private fun BubbleActionIcon(icon: ImageVector, label: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(28.dp)) {
-        Icon(
-            icon, label,
-            tint     = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.size(14.dp)
-        )
-    }
-}
-
-// ── Long-press bottom sheet ────────────────────────────────────────────────────
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MessageActionsSheet(
-    onDismiss    : () -> Unit,
-    onCopy       : () -> Unit,
-    onShare      : () -> Unit,
-    onSave       : () -> Unit,
-    onRegenerate : () -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState       = rememberModalBottomSheetState(),
-        containerColor   = MaterialTheme.colorScheme.surface,
-        dragHandle = {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(32.dp)
-                        .height(3.dp)
-                        .clip(RoundedCornerShape(2.dp))
-                        .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(0.2f))
-                )
-            }
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp)
-        ) {
-            Text(
-                "Message Actions",
-                style      = MaterialTheme.typography.titleSmall,
-                color      = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-                modifier   = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
-            )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(0.4f))
-            Spacer(Modifier.height(4.dp))
-            SheetAction(Icons.Default.ContentCopy, "Copy",                    "Copy full response",             onCopy)
-            SheetAction(Icons.Default.Share,       "Share",                   "Send via WhatsApp, Gmail, etc.", onShare)
-            SheetAction(Icons.Default.BookmarkAdd, "Save to Knowledge Vault", "Store for offline access",       onSave)
-            SheetAction(Icons.Default.Refresh,     "Regenerate",              "Generate a new response",        onRegenerate)
-            SheetAction(Icons.Default.TextFields,  "Select Text",             "Long-press text to select",      onDismiss)
-        }
-    }
-}
-
-@Composable
-private fun SheetAction(
-    icon     : ImageVector,
-    title    : String,
-    subtitle : String,
-    onClick  : () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 13.dp),
-        verticalAlignment     = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        Box(
-            modifier         = Modifier
-                .size(38.dp)
-                .background(Blue50, RoundedCornerShape(11.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icon, null, tint = Blue500, modifier = Modifier.size(18.dp))
-        }
-        Column {
-            Text(
-                title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-// ── Typing dots ────────────────────────────────────────────────────────────────
 
 @Composable
 private fun TypingDots(isDarkTheme: Boolean) {
@@ -871,15 +889,13 @@ private fun TypingDots(isDarkTheme: Boolean) {
                 modifier = Modifier
                     .size((5 * scale).dp)
                     .background(
-                        if (isDarkTheme) TextSecondary.copy(0.5f) else TextSecondaryLight.copy(0.4f),
+                        TextSecondary.copy(0.4f),
                         CircleShape
                     )
             )
         }
     }
 }
-
-// ── Message segment parser ─────────────────────────────────────────────────────
 
 private sealed interface MessageSegment {
     data class PlainText(val text: String) : MessageSegment
@@ -904,4 +920,387 @@ private fun parseMessageSegments(text: String): List<MessageSegment> {
 
     if (cursor < text.length) segments += MessageSegment.PlainText(text.substring(cursor))
     return if (segments.isEmpty()) listOf(MessageSegment.PlainText(text)) else segments
+}
+
+@Composable
+private fun CenteredEmptyState(
+    modifier: Modifier = Modifier,
+    input: String,
+    onInputChange: (String) -> Unit,
+    onSend: () -> Unit,
+    onVoice: () -> Unit,
+    onSuggestionClick: (String) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(Modifier.height(16.dp))
+
+        // 1. Gradient infinity loop logo
+        Image(
+            painter = painterResource(id = R.drawable.logo),
+            contentDescription = "Infinity Logo",
+            modifier = Modifier.size(width = 140.dp, height = 76.dp),
+            contentScale = ContentScale.Fit
+        )
+
+        Spacer(Modifier.height(10.dp))
+
+        // 2. Dropdown selector pill
+        Box(
+            modifier = Modifier
+                .shadow(2.dp, RoundedCornerShape(20.dp), clip = false)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White)
+                .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
+                .clickable { }
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    "AI Chat - Offline",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    color = Color(0xFF475569)
+                )
+                Icon(Icons.Default.KeyboardArrowDown, null, tint = Color(0xFF64748B), modifier = Modifier.size(16.dp))
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // 3. Recently Search Section (Shifted to above the Chatbox)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(6.dp, RoundedCornerShape(20.dp), clip = false, ambientColor = Color(0xFF94A3B8).copy(alpha = 0.10f), spotColor = Color(0xFF1E293B).copy(alpha = 0.08f))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White)
+                .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Recently visited",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                        color = Color(0xFF1E293B)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
+                            .border(0.8.dp, Color(0xFFE2E8F0), CircleShape)
+                            .clickable { },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.ArrowForward, null, tint = Color(0xFF475569), modifier = Modifier.size(12.dp))
+                    }
+                }
+
+                HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.8.dp)
+
+                // Item 1
+                RecentSearchItem(
+                    iconResId = R.drawable.chat,
+                    title = "Write a Python function to check prime",
+                    subtitle = "AI Chat",
+                    timeText = "Changed an hour ago",
+                    isStarred = true
+                )
+
+                HorizontalDivider(color = Color(0xFFE2E8F0), thickness = 0.8.dp)
+
+                // Item 2
+                RecentSearchItem(
+                    iconResId = R.drawable.learn,
+                    title = "Social media schedule",
+                    subtitle = "Main workspace",
+                    timeText = "Changed an hour ago",
+                    isStarred = false
+                )
+            }
+        }
+
+        // Spacer weight to push the remaining elements (chatbox input, options, history) to the bottom
+        Spacer(Modifier.weight(1f))
+
+        // 4. Compact text input card with 3D shadow effect (height decreased slightly)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(12.dp, RoundedCornerShape(20.dp), clip = false, ambientColor = Color(0xFF64748B).copy(alpha = 0.12f), spotColor = Color(0xFF1E293B).copy(alpha = 0.10f))
+                .shadow(4.dp, RoundedCornerShape(20.dp), clip = false, ambientColor = Color(0xFF94A3B8).copy(alpha = 0.08f), spotColor = Color(0xFF475569).copy(alpha = 0.06f))
+                .clip(RoundedCornerShape(20.dp))
+                .background(Color.White)
+                .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(20.dp))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                BasicTextField(
+                    value = input,
+                    onValueChange = onInputChange,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp, max = 90.dp),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(
+                        color = Color(0xFF1E293B),
+                        lineHeight = 22.sp
+                    ),
+                    cursorBrush = SolidColor(BluePrimary),
+                    decorationBox = { inner ->
+                        if (input.isEmpty()) {
+                            Text(
+                                "How can I help you today?",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+                        inner()
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Send,
+                        capitalization = KeyboardCapitalization.Sentences
+                    ),
+                    keyboardActions = KeyboardActions(onSend = { if (input.isNotBlank()) onSend() })
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Plus icon
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF1F5F9))
+                            .clickable { },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.Add, "Add", tint = Color(0xFF475569), modifier = Modifier.size(18.dp))
+                    }
+
+                    // Center label
+                    Text(
+                        "AI Chat",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                        color = Color(0xFF94A3B8)
+                    )
+
+                    // Right: Mic + wave or Send
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (input.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(BluePrimary)
+                                    .clickable { onSend() },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = Color.White, modifier = Modifier.size(14.dp))
+                            }
+                        } else {
+                            Icon(Icons.Default.Mic, "Voice", tint = Color(0xFF64748B), modifier = Modifier.size(20.dp).clickable { onVoice() })
+                            // Wave bars
+                            Row(
+                                modifier = Modifier.height(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf(7.dp, 12.dp, 9.dp, 14.dp, 10.dp, 5.dp).forEach { h ->
+                                    Box(
+                                        modifier = Modifier
+                                            .width(2.dp)
+                                            .height(h)
+                                            .clip(RoundedCornerShape(1.dp))
+                                            .background(Color(0xFF94A3B8))
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(14.dp))
+
+        // 5. Action chips - Row 1 (Write, Learn, Code)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
+        ) {
+            GlassyChip(icon = Icons.Default.Edit, label = "Write") { onSuggestionClick("Write") }
+            GlassyChipWithImage(drawableRes = R.drawable.learn, label = "Learn") { onSuggestionClick("Learn") }
+            GlassyChip(icon = Icons.Default.Code, label = "</> Code") { onSuggestionClick("Code") }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        // Row 2 (File Analyzer + Create Image)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)
+        ) {
+            GlassyChipWithImage(drawableRes = R.drawable.file, label = "File Analyzer") { onSuggestionClick("File Analyzer") }
+            GlassyChipWithImage(drawableRes = R.drawable.image, label = "Create Image") { onSuggestionClick("Create Image") }
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        // 6. View History
+        Text(
+            "View History",
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = BluePrimary,
+            modifier = Modifier.clickable { }
+        )
+
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+// ── Glassy chip with vector icon ─────────────────────────────────────────────
+@Composable
+private fun GlassyChip(
+    icon: ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .shadow(4.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = Color(0xFF94A3B8).copy(alpha = 0.15f), spotColor = Color(0xFF94A3B8).copy(alpha = 0.2f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.92f))
+            .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(icon, label, tint = Color(0xFF475569), modifier = Modifier.size(14.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                color = Color(0xFF1E293B)
+            )
+        }
+    }
+}
+
+// ── Glassy chip with drawable image icon ─────────────────────────────────────
+@Composable
+private fun GlassyChipWithImage(
+    drawableRes: Int,
+    label: String,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .shadow(4.dp, RoundedCornerShape(16.dp), clip = false, ambientColor = Color(0xFF94A3B8).copy(alpha = 0.15f), spotColor = Color(0xFF94A3B8).copy(alpha = 0.2f))
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.92f))
+            .border(0.8.dp, Color(0xFFE2E8F0), RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Image(
+                painter = painterResource(id = drawableRes),
+                contentDescription = label,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Medium),
+                color = Color(0xFF1E293B)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RecentSearchItem(
+    iconResId: Int,
+    title: String,
+    subtitle: String,
+    timeText: String,
+    isStarred: Boolean,
+    onClick: () -> Unit = {}
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFFF1F5F9)),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = iconResId),
+                contentDescription = null,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = Color(0xFF1E293B),
+                maxLines = 1
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF64748B)
+            )
+            Text(
+                text = timeText,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF94A3B8)
+            )
+        }
+
+        Icon(
+            imageVector = Icons.Filled.Star,
+            contentDescription = "Starred status",
+            tint = if (isStarred) Color(0xFFFFB020) else Color(0xFFC4CDD5),
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }

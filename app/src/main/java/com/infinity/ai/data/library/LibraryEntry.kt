@@ -9,7 +9,8 @@ enum class EntryType(val label: String) {
     OCR           ("OCR Scan"),
     SCREENSHOT    ("Screenshot"),
     QUIZ          ("Quiz"),
-    NOTE          ("Note")
+    NOTE          ("Note"),
+    CHAT          ("Chat")
 }
 
 @Entity(tableName = "library_entries")

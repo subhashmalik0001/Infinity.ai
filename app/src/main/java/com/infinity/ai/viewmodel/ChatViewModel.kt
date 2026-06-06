@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import com.infinity.ai.ai.repository.AIRepository
 import com.infinity.ai.ai.state.AIInferenceState
 import com.infinity.ai.model.ChatMessage
+import com.infinity.ai.data.library.LibraryRepository
+import com.infinity.ai.data.library.EntryType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,13 +50,52 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     private var generationJob: Job? = null
     private var messageIdCounter = 0L
     private fun nextId() = ++messageIdCounter
-
-    // Bug fix: track whether stop was user-initiated so onCompletion doesn't
-    // replace a valid partial response with an error message.
     private var userStoppedGeneration = false
+
+    private val historyFile = java.io.File(app.filesDir, "chat_history.txt")
+
+    private fun saveChatHistory(messages: List<ChatMessage>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                historyFile.bufferedWriter().use { writer ->
+                    messages.forEach { msg ->
+                        val escapedText = msg.text.replace("\n", "\\n").replace("|", "\\p")
+                        writer.write("${msg.id}|${msg.isUser}|$escapedText\n")
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save chat history", e)
+            }
+        }
+    }
+
+    private fun loadChatHistory() {
+        viewModelScope.launch(Dispatchers.IO) {
+            if (!historyFile.exists()) return@launch
+            try {
+                val list = mutableListOf<ChatMessage>()
+                historyFile.bufferedReader().useLines { lines ->
+                    lines.forEach { line ->
+                        val parts = line.split("|", limit = 3)
+                        if (parts.size == 3) {
+                            val id = parts[0].toLongOrNull() ?: 0L
+                            val isUser = parts[1].toBooleanStrictOrNull() ?: false
+                            val text = parts[2].replace("\\n", "\n").replace("\\p", "|")
+                            list.add(ChatMessage(id, text, isUser))
+                        }
+                    }
+                }
+                _messages.value = list
+                messageIdCounter = list.maxOfOrNull { it.id } ?: 0L
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load chat history", e)
+            }
+        }
+    }
 
     init {
         initializeAI()
+        loadChatHistory()
     }
 
     // ── AI Initialization ──────────────────────────────────────────────────────
@@ -91,6 +132,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "AI engine error. Please restart the app.",
                 isUser = false)
             _messages.value = _messages.value + userMsg + errMsg
+            saveChatHistory(_messages.value)
             _input.value = ""
             _showSuggestions.value = false
             return
@@ -101,6 +143,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
         val userMsg = ChatMessage(nextId(), text, isUser = true)
         _messages.value = _messages.value + userMsg
+        saveChatHistory(_messages.value)
 
         generateReply(text)
     }
@@ -110,6 +153,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
         val welcome = ChatMessage(nextId(), "Hello! I'm Infinity. How can I help you today?", isUser = false)
         val userMsg = ChatMessage(nextId(), prompt, isUser = true)
         _messages.value = listOf(welcome, userMsg)
+        saveChatHistory(_messages.value)
         if (aiState.value is AIInferenceState.Loading ||
             aiState.value is AIInferenceState.Error) {
             val errMsg = ChatMessage(nextId(),
@@ -119,6 +163,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                     "AI engine error. Please restart the app.",
                 isUser = false)
             _messages.value = _messages.value + errMsg
+            saveChatHistory(_messages.value)
             return
         }
         generateReply(prompt)
@@ -126,11 +171,6 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopGeneration() {
         userStoppedGeneration = true
-        // Bug fix: stop C++ thread FIRST, then cancel the coroutine job.
-        // Previously cancel() fired awaitClose (which called stopGeneration) then
-        // repository.stop() called it again — harmless but wrong order semantically.
-        // More importantly: stopping C++ first reduces the window where a new
-        // generation could start while the old thread is still running.
         repository.stop()
         generationJob?.cancel()
     }
@@ -138,6 +178,7 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
     fun clearChat() {
         stopGeneration()
         _messages.value = emptyList()
+        saveChatHistory(emptyList())
         _input.value = ""
         _showSuggestions.value = true
     }
@@ -169,15 +210,28 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
                         if (cause != null) {
                             Log.e(TAG, "Generation cancelled or failed", cause)
                         }
-                        // Bug fix: only replace blank message with error if the stop was NOT
-                        // user-initiated. A user-stopped generation may have a valid partial
-                        // response that should be preserved.
                         if (!userStoppedGeneration) {
                             val current = _messages.value.find { it.id == aiMsgId }
                             if (current?.text.isNullOrBlank()) {
                                 updateMessage(aiMsgId, "I couldn't generate a response. Please try again.")
+                            } else {
+                                val responseText = current.text
+                                viewModelScope.launch(Dispatchers.IO) {
+                                    try {
+                                        val repo = LibraryRepository.getInstance(getApplication())
+                                        repo.save(
+                                            type = EntryType.CHAT,
+                                            content = "Q: $userInput\n\nA: $responseText",
+                                            title = userInput.take(60).ifBlank { "Chat Response" },
+                                            sourceInfo = "Infinity Chat"
+                                        )
+                                    } catch (ex: Exception) {
+                                        Log.e(TAG, "Failed to save chat to library", ex)
+                                    }
+                                }
                             }
                         }
+                        saveChatHistory(_messages.value)
                     }
                     .collect { token -> appendToken(aiMsgId, token) }
             } catch (e: Exception) {

@@ -1,49 +1,31 @@
 package com.infinity.ai.ui.theme
 
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 
-private val Dark = darkColorScheme(
-    primary          = Blue500,
-    onPrimary        = TextPrimary,
-    background       = DarkBg,
+private val LightBlueScheme = lightColorScheme(
+    primary          = BluePrimary,
+    onPrimary        = TextOnPrimary,
+    background       = LightBlueBgEnd,
     onBackground     = TextPrimary,
-    surface          = DarkSurface,
+    surface          = CardWhite,
     onSurface        = TextPrimary,
-    surfaceVariant   = DarkSurfaceElevated,
+    surfaceVariant   = Color(0xFFF1F5F9), // Slate 100
     onSurfaceVariant = TextSecondary,
-    outline          = DarkBorder,
-    outlineVariant   = DarkBorder,
-    secondary        = Blue400,
-    onSecondary      = DarkBg,
+    outline          = BorderLight,
+    secondary        = BluePrimary,
+    onSecondary      = TextOnPrimary,
     error            = ErrorRed,
-    onError          = TextPrimary
-)
-
-private val Light = lightColorScheme(
-    primary          = Blue500,
-    onPrimary        = LightSurface,
-    background       = LightBg,
-    onBackground     = TextPrimaryLight,
-    surface          = LightSurface,
-    onSurface        = TextPrimaryLight,
-    surfaceVariant   = LightSurfaceElevated,
-    onSurfaceVariant = TextSecondaryLight,
-    outline          = LightBorder,
-    outlineVariant   = LightBorder,
-    secondary        = Blue400,
-    onSecondary      = LightSurface,
-    error            = ErrorRed,
-    onError          = LightSurface
+    onError          = TextOnPrimary
 )
 
 @Composable
-fun InfinityTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
+fun InfinityTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (darkTheme) Dark else Light,
-        typography = Typography,
-        content = content
+        colorScheme = LightBlueScheme,
+        typography  = Typography,
+        content     = content
     )
 }
